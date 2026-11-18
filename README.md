@@ -18,9 +18,21 @@ Site 100 % statique (aucun serveur, aucun back-end) : il suffit d'ouvrir `index.
    la photo part automatiquement à l'IA choisie et le corrigé revient **dans la langue de l'image**.
 6. **🌐 Recherches** — liens Google / Scholar / YouTube / Wikipédia construits dans la langue détectée.
 
-## Activer le corrigé IA (optionnel)
+## Activer le corrigé IA
 
-Le site supporte **5 fournisseurs** (4 gratuits) — choisis-le dans le panneau **🔑 Clé IA** :
+### 🔑 Mode par défaut : la clé est déjà intégrée (recommandé)
+
+Le site appelle un **petit serveur gratuit** (Cloudflare Worker, code dans `worker.js`) qui
+detient la clé API. Elle est stockée en **variable secrète côté serveur** :
+elle n'apparaît **ni dans le site, ni dans GitHub, ni dans ton navigateur**.
+Sélectionne **🔑 ScreenMind (clé intégrée)** dans le panneau **🔑 Clé IA** → rien d'autre à faire.
+
+> Le code de ce serveur est dans [`worker.js`](worker.js), son URL dans `script.js` (`PROXY_URL`) ;
+> pour modifier la clé : Cloudflare Dashboard → Workers → `screenmind` → Settings → Variables and Secrets.
+
+### Autres fournisseurs (clé collée dans le navigateur)
+
+Le site supporte aussi **5 fournisseurs** (4 gratuits) — choisis-le dans le panneau **🔑 Clé IA** :
 
 | Fournisseur | Clé | Modèle par défaut |
 |---|---|---|
@@ -44,6 +56,7 @@ Sans clé, le site continue de fonctionner : il lit, détecte et résout tout ce
 | `index.html` | Structure de la page                              |
 | `style.css`  | Thème et mise en page                             |
 | `script.js`  | Capture, OCR, détection langue/matière, solveur, IA multi-fournisseurs |
+| `worker.js`  | Proxy Cloudflare qui garde la clé API cachée       |
 
 ## Lancer en local
 

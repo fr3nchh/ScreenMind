@@ -1587,7 +1587,7 @@ const LS_LEGACY    = 'screenmind_gemini_key';   // ancien emplacement (avant mul
 
 // URL du proxy (Worker Cloudflare) : la clé API est stockée sur le
 // serveur, elle n'apparaît jamais dans le site. Vide = option masquée.
-const PROXY_URL = '';
+const PROXY_URL = 'https://screenmind.blzix.workers.dev/';
 
 const PROVIDERS = {
     screenmind: {
