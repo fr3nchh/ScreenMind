@@ -1585,7 +1585,20 @@ const LS_KEY_PRE   = 'screenmind_key_';
 const LS_MODEL_PRE = 'screenmind_model_';
 const LS_LEGACY    = 'screenmind_gemini_key';   // ancien emplacement (avant multi-fournisseurs)
 
+// URL du proxy (Worker Cloudflare) : la clé API est stockée sur le
+// serveur, elle n'apparaît jamais dans le site. Vide = option masquée.
+const PROXY_URL = '';
+
 const PROVIDERS = {
+    screenmind: {
+        label: 'ScreenMind',
+        kind: 'proxy',
+        keyUrl: '',
+        keyHint: 'Aucune clé à créer : la clé est stockée de façon cachée sur un serveur sécurisé, elle n\'est jamais visible dans le site.',
+        models: [],
+        fallback: 'Le serveur choisit automatiquement le meilleur modèle gratuit.',
+        defaultModel: ''
+    },
     gemini: {
         label: 'Google Gemini',
         kind: 'gemini',
@@ -1643,7 +1656,8 @@ try {
 
 function currentProvider() {
     const p = localStorage.getItem(LS_PROVIDER);
-    return (p && PROVIDERS[p]) ? p : 'gemini';
+    if (p && PROVIDERS[p] && (p !== 'screenmind' || PROXY_URL)) return p;
+    return PROXY_URL ? 'screenmind' : 'gemini';
 }
 function storedKey(p) { return (localStorage.getItem(LS_KEY_PRE + p) || '').trim(); }
 function storedModel(p) { return (localStorage.getItem(LS_MODEL_PRE + p) || '').trim(); }
@@ -1660,23 +1674,41 @@ function getModel(p) {
 function refreshProviderUI() {
     const p = currentProvider();
     const cfg = PROVIDERS[p];
-    if (apiProviderSel) apiProviderSel.value = p;
-    if (apiKeyInput) apiKeyInput.value = storedKey(p);
+    const isProxy = cfg.kind === 'proxy';
+
+    if (apiProviderSel) {
+        const opt = apiProviderSel.querySelector('option[value="screenmind"]');
+        if (opt && opt.style) opt.style.display = PROXY_URL ? '' : 'none';
+        apiProviderSel.value = p;
+    }
+    if (apiKeyInput) {
+        apiKeyInput.value = storedKey(p);
+        apiKeyInput.disabled = isProxy;
+        apiKeyInput.placeholder = isProxy ? 'Aucune clé nécessaire' : 'Colle ta clé ici';
+    }
     if (apiModelInput) {
+        apiModelInput.disabled = isProxy;
         apiModelInput.value = storedModel(p) || cfg.defaultModel;
         apiModelInput.placeholder = cfg.defaultModel ? 'Défaut : ' + cfg.defaultModel : 'Modèle utilisé';
     }
+    if (btnSaveKey) btnSaveKey.disabled = isProxy;
     if (apiLinkEl) {
+        apiLinkEl.style.display = isProxy ? 'none' : '';
         apiLinkEl.href = cfg.keyUrl;
         apiLinkEl.textContent = '🔑 Obtenir une clé ' + cfg.label + ' →';
     }
     if (apiHelpEl) apiHelpEl.textContent = cfg.keyHint + '  •  ' + cfg.fallback;
     if (keyStatus) {
-        const has = storedKey(p);
-        keyStatus.textContent = has
-            ? '✅ Clé ' + cfg.label + ' enregistrée dans ce navigateur'
-            : 'Aucune clé enregistrée pour ' + cfg.label;
-        keyStatus.classList[has ? 'add' : 'remove']('ok');
+        if (isProxy) {
+            keyStatus.textContent = '✅ Clé intégrée sur le serveur — rien à faire de ton côté';
+            keyStatus.classList.add('ok');
+        } else {
+            const has = storedKey(p);
+            keyStatus.textContent = has
+                ? '✅ Clé ' + cfg.label + ' enregistrée dans ce navigateur'
+                : 'Aucune clé enregistrée pour ' + cfg.label;
+            keyStatus.classList[has ? 'add' : 'remove']('ok');
+        }
     }
 }
 
@@ -2367,11 +2399,33 @@ async function callOpenAICompatible(cfg, key, prompt, img, model) {
     return content;
 }
 
+// Appel via le proxy (clé stockée côté serveur, jamais dans le site)
+async function callProxy(prompt, img, model) {
+    const res = await fetch(PROXY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            prompt: prompt,
+            image: { mime: img.mime, b64: img.b64 },
+            model: model || undefined
+        })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const e = new Error(data.error || ('HTTP ' + res.status));
+        e.retryable = (res.status === 404 || res.status === 429 || res.status >= 500);
+        throw e;
+    }
+    const text = (data.text || '').trim();
+    if (!text) throw new Error('Réponse vide du serveur');
+    return text;
+}
+
 async function askAI() {
     const p = currentProvider();
     const cfg = PROVIDERS[p];
     const key = getApiKey();
-    if (!key) {
+    if (!key && cfg.kind !== 'proxy') {
         geminiBlock.style.display = 'block';
         geminiStatus.textContent = "Il faut une clé " + cfg.label + " pour cet exercice (2 clics, elle reste dans ton navigateur).";
         geminiStatus.className = 'hint warn';
@@ -2382,7 +2436,8 @@ async function askAI() {
     if (!imageDataUrl) return;
 
     const L = LANG_TABLE[lastLang] || LANG_TABLE.fr;
-    const models = [getModel(p)].concat(cfg.models || []).filter((m, i, a) => m && a.indexOf(m) === i);
+    let models = [getModel(p)].concat(cfg.models || []).filter((m, i, a) => m && a.indexOf(m) === i);
+    if (!models.length) models.push('');
 
     geminiBlock.style.display = 'block';
     btnGemini.disabled = true;
@@ -2405,12 +2460,14 @@ async function askAI() {
     let lastError = null;
     for (const model of models) {
         try {
-            const text = (cfg.kind === 'gemini')
-                ? await callGemini(key, prompt, img, model)
-                : await callOpenAICompatible(cfg, key, prompt, img, model);
+            const text = (cfg.kind === 'proxy')
+                ? await callProxy(prompt, img, model)
+                : (cfg.kind === 'gemini')
+                    ? await callGemini(key, prompt, img, model)
+                    : await callOpenAICompatible(cfg, key, prompt, img, model);
 
             geminiAnswer.innerHTML = mdToHtml(text);
-            geminiStatus.textContent = '✅ Corrigé complet généré par ' + cfg.label + ' (' + model + ') — dans la langue de ton image.';
+            geminiStatus.textContent = '✅ Corrigé complet généré par ' + cfg.label + (model ? ' (' + model + ')' : '') + ' — dans la langue de ton image.';
             hideLoading();
             btnGemini.disabled = false;
             addCopyButton(text);
@@ -2566,9 +2623,11 @@ async function analyzeScreen() {
     geminiStatus.className = 'hint';
 
     const key = getApiKey();
-    const aiLabel = PROVIDERS[currentProvider()].label;
+    const aiCfg = PROVIDERS[currentProvider()];
+    const aiLabel = aiCfg.label;
+    const useAI = !!key || aiCfg.kind === 'proxy';
     if (needsHelp) {
-        if (key) {
+        if (useAI) {
             geminiStatus.textContent = localAnswers.length
                 ? "Quelques questions dépassent l'analyse locale → envoi direct à " + aiLabel + "…"
                 : "Trop complexe pour l'analyse locale → envoi direct à " + aiLabel + "…";
