@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScreenMind - Photo d'exercice → Réponses</title>
+    <title>ScreenMind — Photo d'exercice → Réponses</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🧠 ScreenMind</h1>
-            <p class="subtitle">Photo d'un exercice ou d'un contrôle → le site lit, détecte la langue et complète les réponses</p>
+            <h1>ScreenMind</h1>
+            <p class="subtitle">Photographiez un exercice : le site lit le texte, détecte la langue et trouve les réponses.</p>
             <div class="steps">
                 <span class="step is-active">1 · Photo</span>
                 <span class="step" id="step-2">2 · Langue &amp; matière</span>
@@ -27,31 +27,20 @@
                     <canvas id="canvas" style="display:none;"></canvas>
                     <img id="preview" alt="Aperçu de la photo">
                     <div id="placeholder">
-                        <span class="icon">📷</span>
-                        <p>Importe une image, prends une photo ou partage ton écran</p>
+                        <p>Importez une image, prenez une photo ou partagez votre écran</p>
                     </div>
                     <div id="camera-actions" class="camera-actions">
-                        <button id="btn-shot" class="btn btn-success">📸 Valider la photo</button>
-                        <button id="btn-shot-cancel" class="btn btn-danger">✖ Annuler</button>
+                        <button id="btn-shot" class="btn btn-success">Valider la photo</button>
+                        <button id="btn-shot-cancel" class="btn btn-danger">Annuler</button>
                     </div>
                 </div>
 
                 <div class="buttons">
-                    <button id="btn-file" class="btn btn-primary">
-                        <span class="btn-icon">📁</span> Importer
-                    </button>
-                    <button id="btn-camera" class="btn btn-primary">
-                        <span class="btn-icon">📸</span> Caméra
-                    </button>
-                    <button id="btn-capture" class="btn btn-primary">
-                        <span class="btn-icon">🖥️</span> Écran
-                    </button>
-                    <button id="btn-analyze" class="btn btn-success" disabled>
-                        <span class="btn-icon">🔍</span> Analyser
-                    </button>
-                    <button id="btn-reset" class="btn btn-ghost" title="Réinitialiser">
-                        <span class="btn-icon">🔄</span>
-                    </button>
+                    <button id="btn-file" class="btn btn-ghost">Importer une image</button>
+                    <button id="btn-camera" class="btn btn-ghost">Prendre une photo</button>
+                    <button id="btn-capture" class="btn btn-ghost">Partager l'écran</button>
+                    <button id="btn-analyze" class="btn btn-primary" disabled>Analyser</button>
+                    <button id="btn-reset" class="btn btn-ghost btn-reset" title="Réinitialiser">Recommencer</button>
                 </div>
                 <input type="file" id="file-input" accept="image/*" hidden>
 
@@ -72,15 +61,15 @@
 
                 <div class="api-box">
                     <details id="api-details">
-                        <summary>🔑 Clé IA <span class="api-hint">— pour les exercices trop complexes</span></summary>
+                        <summary>Paramètres <span class="api-hint">— pour les exercices plus longs</span></summary>
                         <p>Le site fait tout seul ce qu'il peut : lecture du texte, langue, matière, calculs et équations.
-                           Si l'énoncé est trop complexe pour lui, il envoie la photo à l'IA et te renvoie le corrigé complet,
-                           dans la langue de l'image. Choisis le fournisseur dont tu as (ou veux) une clé :</p>
+                           Si l'énoncé est trop complexe pour lui, il envoie la photo et te renvoie le corrigé complet,
+                           dans la langue de l'image. Choisis le service que tu veux utiliser :</p>
 
-                        <label class="field-label" for="api-provider">Fournisseur</label>
+                        <label class="field-label" for="api-provider">Service</label>
                         <div class="api-line">
                             <select id="api-provider">
-                                <option value="screenmind">🔑 ScreenMind (clé intégrée)</option>
+                                <option value="screenmind">ScreenMind (intégrée)</option>
                                 <option value="gemini">Google Gemini</option>
                                 <option value="openrouter">OpenRouter (gratuit)</option>
                                 <option value="groq">Groq (gratuit)</option>
@@ -89,7 +78,7 @@
                             </select>
                         </div>
 
-                        <label class="field-label" for="api-key">Clé API</label>
+                        <label class="field-label" for="api-key">Clé</label>
                         <div class="api-line">
                             <input type="password" id="api-key" placeholder="Colle ta clé ici" autocomplete="off">
                             <button id="btn-save-key" class="btn btn-small">Enregistrer</button>
@@ -102,7 +91,7 @@
                         </div>
 
                         <p id="api-help" class="api-help"></p>
-                        <a id="api-link" class="api-link" href="#" target="_blank" rel="noopener">🔑 Obtenir une clé →</a>
+                        <a id="api-link" class="api-link" href="#" target="_blank" rel="noopener">Obtenir une clé →</a>
                     </details>
                 </div>
             </section>
@@ -131,29 +120,27 @@
                 </div>
 
                 <div class="answers-block" id="answers-block">
-                    <h3>✅ Réponses trouvées par le site</h3>
+                    <h3>Réponses</h3>
                     <div id="answers-list"></div>
                     <p id="answers-hint" class="hint"></p>
                 </div>
 
                 <div class="gemini-block" id="gemini-block" style="display:none;">
-                    <h3>🤖 Corrigé complet</h3>
+                    <h3>Corrigé détaillé</h3>
                     <p id="gemini-status" class="hint"></p>
-                    <button id="btn-gemini" class="btn btn-primary">
-                        <span class="btn-icon">🤖</span> Demander le corrigé complet
-                    </button>
+                    <button id="btn-gemini" class="btn btn-primary">Générer le corrigé détaillé</button>
                     <div id="gemini-answer" class="answer-box"></div>
                 </div>
 
                 <details class="ocr-details">
-                    <summary>📄 Texte lu sur la photo</summary>
+                    <summary>Texte lu sur la photo</summary>
                     <pre id="detected-text"></pre>
                 </details>
 
                 <div id="top-matches" class="top-matches-section"></div>
 
                 <div id="web-results" class="web-results-section">
-                    <h3>🌐 Recherches dans la langue de l'image</h3>
+                    <h3>Pour aller plus loin</h3>
                     <div id="web-links"></div>
                     <div id="wikipedia-result" class="wikipedia-box"></div>
                 </div>
@@ -166,7 +153,7 @@
         </div>
 
         <footer>
-            <p>OCR local (Tesseract.js) • Résolution automatique • Gemini / OpenRouter / Groq / Mistral / OpenAI en secours si c'est trop complexe</p>
+            <p>Lecture du texte · Langue détectée · Réponses calculées sur l'appareil</p>
         </footer>
     </div>
 

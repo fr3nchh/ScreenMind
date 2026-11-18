@@ -1671,6 +1671,16 @@ function getModel(p) {
     return storedModel(p) || (PROVIDERS[p].defaultModel || '');
 }
 
+// ── Affichage sans emoji (interface sobre) ──
+const EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{3030}\u{303D}\u{3297}\u{3299}]/gu;
+function noEmoji(s) {
+    return String(s == null ? '' : s).replace(EMOJI_RE, '').replace(/\s{2,}/g, ' ').trim();
+}
+function letterOf(s) {
+    const c = noEmoji(s).replace(/[^A-Za-zÀ-ÿ0-9]/g, '');
+    return (c.charAt(0) || '?').toUpperCase();
+}
+
 function refreshProviderUI() {
     const p = currentProvider();
     const cfg = PROVIDERS[p];
@@ -1695,17 +1705,17 @@ function refreshProviderUI() {
     if (apiLinkEl) {
         apiLinkEl.style.display = isProxy ? 'none' : '';
         apiLinkEl.href = cfg.keyUrl;
-        apiLinkEl.textContent = '🔑 Obtenir une clé ' + cfg.label + ' →';
+        apiLinkEl.textContent = 'Obtenir une clé →';
     }
     if (apiHelpEl) apiHelpEl.textContent = cfg.keyHint + '  •  ' + cfg.fallback;
     if (keyStatus) {
         if (isProxy) {
-            keyStatus.textContent = '✅ Clé intégrée sur le serveur — rien à faire de ton côté';
+            keyStatus.textContent = 'Clé intégrée sur le serveur — rien à faire de ton côté';
             keyStatus.classList.add('ok');
         } else {
             const has = storedKey(p);
             keyStatus.textContent = has
-                ? '✅ Clé ' + cfg.label + ' enregistrée dans ce navigateur'
+                ? 'Clé ' + cfg.label + ' enregistrée dans ce navigateur'
                 : 'Aucune clé enregistrée pour ' + cfg.label;
             keyStatus.classList[has ? 'add' : 'remove']('ok');
         }
@@ -1730,7 +1740,7 @@ if (btnSaveKey) btnSaveKey.addEventListener('click', () => {
 
     refreshProviderUI();
     if (keyStatus) {
-        keyStatus.textContent = v ? '✅ Clé ' + cfg.label + ' enregistrée' : 'Clé effacée.';
+        keyStatus.textContent = v ? 'Clé ' + cfg.label + ' enregistrée' : 'Clé effacée.';
         keyStatus.classList[v ? 'add' : 'remove']('ok');
     }
 });
@@ -2192,35 +2202,35 @@ function displayResults(detection, langCode, text) {
     if (step3) step3.classList.add('is-active');
 
     const subject = allCategories[detection.subject] || {
-        name: 'Contenu non identifié', icon: '❓', category: '—',
+        name: 'Contenu non identifié', icon: '', category: '—',
         description: "Le contenu n'a pas pu être identifié automatiquement"
     };
 
-    $('subject-icon').textContent = subject.icon;
+    $('subject-icon').textContent = letterOf(subject.name);
     $('subject-name').textContent = subject.name;
     $('subject-description').textContent = subject.description;
     const cat = $('subject-category');
-    if (cat) cat.textContent = subject.category;
+    if (cat) cat.textContent = noEmoji(subject.category);
 
     const fill = $('confidence-fill'), txt = $('confidence-text');
     fill.style.width = detection.confidence + '%';
     if (detection.confidence > 70) {
-        fill.style.background = 'linear-gradient(90deg, #38ef7d, #11998e)';
-        txt.style.color = '#38ef7d';
+        fill.style.background = '#5fa8d3';
+        txt.style.color = '#3f8ab8';
     } else if (detection.confidence > 40) {
-        fill.style.background = 'linear-gradient(90deg, #f7971e, #ffd200)';
-        txt.style.color = '#ffd200';
+        fill.style.background = '#e8a13c';
+        txt.style.color = '#c9862a';
     } else {
-        fill.style.background = 'linear-gradient(90deg, #eb3349, #f45c43)';
-        txt.style.color = '#f45c43';
+        fill.style.background = '#d0603c';
+        txt.style.color = '#c0562f';
     }
     txt.textContent = detection.confidence + '%';
 
     // Chips : langue détectée + matière + confiance
     chipsEl.innerHTML = '';
     const L = LANG_TABLE[langCode] || LANG_TABLE.fr;
-    addChip(L.flag + ' ' + L.name + ' détecté', 'chip-lang');
-    addChip(subject.icon + ' ' + subject.name, 'chip-subject');
+    addChip(noEmoji(L.name) + ' détecté', 'chip-lang');
+    addChip(noEmoji(subject.name), 'chip-subject');
     addChip('Confiance ' + detection.confidence + '%', detection.confidence > 60 ? 'chip-good' : 'chip-warn');
     const wordCount = (text.match(/\S+/g) || []).length;
     addChip(wordCount + ' mots lus', 'chip-soft');
@@ -2232,9 +2242,9 @@ function displayResults(detection, langCode, text) {
             detection.topMatches.slice(1, 4).forEach(m => {
                 const div = document.createElement('div');
                 div.className = 'top-match-item';
-                div.innerHTML = '<span class="top-match-icon">' + m.icon + '</span>' +
-                    '<span class="top-match-name">' + m.name + '</span>' +
-                    '<span class="top-match-cat">' + m.category + '</span>' +
+                div.innerHTML = '<span class="top-match-icon">' + letterOf(m.name) + '</span>' +
+                    '<span class="top-match-name">' + noEmoji(m.name) + '</span>' +
+                    '<span class="top-match-cat">' + noEmoji(m.category) + '</span>' +
                     '<span class="top-match-score">' + m.keywords + ' mots-clés</span>';
                 topMatchesEl.appendChild(div);
             });
@@ -2255,12 +2265,12 @@ function renderAnswers(list, unsolved) {
             q.textContent = a.q;
             const ans = document.createElement('div');
             ans.className = 'answer-a';
-            ans.textContent = '✅ ' + a.a;
+            ans.textContent = noEmoji(a.a);
             div.appendChild(q); div.appendChild(ans);
             answersList.appendChild(div);
         });
         answersHint.textContent = unsolved > 0
-            ? list.length + ' réponse(s) calculée(s) par le site • ' + unsolved + ' question(s) trop complexe(s) → corrigé complet ci-dessous'
+            ? list.length + ' réponse(s) calculée(s) sur l\'appareil • ' + unsolved + ' question(s) plus longue(s) → corrigé détaillé ci-dessous'
             : 'Tout a été résolu automatiquement, sans connexion.';
     } else {
         answersHint.textContent = 'Rien de calculable localement sur cette image (pas de calcul ni d\'équation simple détecté).';
@@ -2467,7 +2477,7 @@ async function askAI() {
                     : await callOpenAICompatible(cfg, key, prompt, img, model);
 
             geminiAnswer.innerHTML = mdToHtml(text);
-            geminiStatus.textContent = '✅ Corrigé complet généré par ' + cfg.label + (model ? ' (' + model + ')' : '') + ' — dans la langue de ton image.';
+            geminiStatus.textContent = 'Corrigé détaillé généré par ' + cfg.label + (model ? ' (' + model + ')' : '') + ' — dans la langue de ton image.';
             hideLoading();
             btnGemini.disabled = false;
             addCopyButton(text);
@@ -2479,7 +2489,7 @@ async function askAI() {
     }
 
     geminiStatus.className = 'hint warn';
-    geminiStatus.textContent = '❌ ' + cfg.label + ' : ' + lastError;
+    geminiStatus.textContent = cfg.label + ' : ' + lastError;
     btnGemini.disabled = false;
     hideLoading();
 }
@@ -2492,9 +2502,9 @@ function addCopyButton(text) {
     if (old) old.remove();
     const b = document.createElement('button');
     b.className = 'btn btn-small copy-btn';
-    b.textContent = '📋 Copier le corrigé';
+    b.textContent = 'Copier le corrigé';
     b.addEventListener('click', () => {
-        navigator.clipboard.writeText(text).then(() => { b.textContent = '✅ Copié !'; });
+        navigator.clipboard.writeText(text).then(() => { b.textContent = 'Copié'; });
     });
     geminiAnswer.appendChild(b);
 }
@@ -2516,10 +2526,10 @@ async function searchWeb(langCode, query, subjectName) {
     const encoded = encodeURIComponent(query);
 
     const links = [
-        { title: '🔍 Google : « ' + query.slice(0, 70) + ' »', url: 'https://www.google.com/search?q=' + encoded + '&hl=' + host, snippet: 'Recherche dans ta langue' },
-        { title: '📚 Google Scholar', url: 'https://scholar.google.com/scholar?q=' + encoded + '&hl=' + host, snippet: 'Cours, annales et solutions académiques' },
-        { title: '🎬 YouTube', url: 'https://www.youtube.com/results?search_query=' + encoded, snippet: 'Vidéo de correction / explication' },
-        { title: '📖 ' + subjectName, url: 'https://' + host + '.wikipedia.org/wiki/Special:Search?search=' + encoded, snippet: 'Wikipédia (' + host + ')' }
+        { title: 'Google : « ' + query.slice(0, 70) + ' »', url: 'https://www.google.com/search?q=' + encoded + '&hl=' + host, snippet: 'Recherche dans ta langue' },
+        { title: 'Google Scholar', url: 'https://scholar.google.com/scholar?q=' + encoded + '&hl=' + host, snippet: 'Cours, annales et solutions académiques' },
+        { title: 'YouTube', url: 'https://www.youtube.com/results?search_query=' + encoded, snippet: 'Vidéo de correction / explication' },
+        { title: subjectName, url: 'https://' + host + '.wikipedia.org/wiki/Special:Search?search=' + encoded, snippet: 'Wikipédia (' + host + ')' }
     ];
     links.forEach(l => {
         const a = document.createElement('a');
@@ -2538,7 +2548,7 @@ async function searchWeb(langCode, query, subjectName) {
             const d = await s.json();
             if (d.extract && wikipediaEl) {
                 wikipediaEl.className = 'wikipedia-box active';
-                const t = document.createElement('div'); t.className = 'wikipedia-title'; t.textContent = '📖 ' + (d.title || subjectName);
+                const t = document.createElement('div'); t.className = 'wikipedia-title'; t.textContent = (d.title || subjectName);
                 const e = document.createElement('div'); e.className = 'wikipedia-extract'; e.textContent = d.extract;
                 wikipediaEl.appendChild(t); wikipediaEl.appendChild(e);
                 if (d.content_urls) {
@@ -2634,7 +2644,7 @@ async function analyzeScreen() {
             await askAI();
         } else {
             geminiStatus.className = 'hint warn';
-            geminiStatus.textContent = "Cet exercice demande un corrigé complet. Ajoute ta clé " + aiLabel + " et le site te donnera les réponses automatiquement, dans la langue de l'image.";
+            geminiStatus.textContent = "Cet exercice demande un corrigé détaillé. Ajoute ta clé " + aiLabel + " et le site te donnera les réponses automatiquement, dans la langue de l'image.";
             if (apiDetails) { apiDetails.open = true; }
         }
     } else {
