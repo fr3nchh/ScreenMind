@@ -818,6 +818,11 @@ footer {
 .answer-box:empty { display: none; }
 .answer-box h4 { color: var(--orange); font-size: 1rem; margin: 16px 0 8px; font-weight: 700; }
 .answer-box h4:first-child { margin-top: 0; }
+.answer-box hr {
+    border: 0;
+    border-top: 1px solid var(--line);
+    margin: 14px 0;
+}
 .answer-box p { margin-bottom: 10px; }
 .answer-box ul, .answer-box ol { margin: 0 0 12px 20px; }
 .answer-box li { margin-bottom: 5px; }

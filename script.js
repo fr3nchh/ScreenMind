@@ -2488,7 +2488,12 @@ function renderAnswers(list, unsolved) {
 // ═══════════════════════════════════════════════════════
 function mdToHtml(md) {
     const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const inline = s => s
+    const math = s => s
+        .replace(/\\times/g, '×').replace(/\\div/g, '÷').replace(/\\cdot/g, '·')
+        .replace(/\\le/g, '≤').replace(/\\ge/g, '≥').replace(/\\ne/g, '≠')
+        .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '$1/$2')
+        .replace(/\$/g, '');
+    const inline = s => math(esc(s))
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/`([^`]+)`/g, '<code>$1</code>')
         .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
@@ -2498,7 +2503,10 @@ function mdToHtml(md) {
 
     for (const raw of String(md).split('\n')) {
         const line = raw.trim();
-        if (/^#{1,6}\s+/.test(line)) {
+        if (/^-{3,}$/.test(line)) {
+            closeList();
+            html += '<hr>';
+        } else if (/^#{1,6}\s+/.test(line)) {
             closeList();
             html += '<h4>' + inline(line.replace(/^#{1,6}\s+/, '')) + '</h4>';
         } else if (/^\s*([-*•o]|✅|✔)\s+/.test(line)) {
