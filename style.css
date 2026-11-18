@@ -832,6 +832,41 @@ footer {
 }
 .copy-btn { margin-top: 12px; }
 
+.correction-box {
+    margin-top: 12px;
+    padding: 14px;
+    background: var(--beige);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+.correction-label {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 10px;
+    line-height: 1.5;
+}
+.correction-input {
+    width: 100%;
+    min-height: 180px;
+    resize: vertical;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--ink);
+    padding: 10px 12px;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    font-family: "Consolas", "SF Mono", monospace;
+    outline: none;
+}
+.correction-input:focus { border-color: var(--orange); }
+.correction-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
 /* Détails OCR */
 .ocr-details {
     margin-top: 18px;

@@ -1572,6 +1572,7 @@ let imageDataUrl = null;   // base64 sans préfixe data:
 let extractedText = null;  // texte lu depuis un fichier non-image (PDF, txt, audio)
 let sourceType = 'image';  // 'image' | 'pdf' | 'text' | 'audio'
 let lastHash = null;       // hash de l'entrée courante (cache)
+let lastImgHash = null;    // hash de l'image courante (cache niveau 1)
 let lastAiText = null;     // dernier corrigé IA généré
 let forceRefresh = false;  // forcer le recalcul (ignorer le cache)
 let imageMime    = 'image/png';
@@ -2645,6 +2646,7 @@ async function askAI() {
             hideLoading();
             btnGemini.disabled = false;
             addCopyButton(text);
+            addCorrectButton(text);
             return;
         } catch (err) {
             lastError = err.message || String(err);
@@ -2679,6 +2681,76 @@ function addCopyButton(text) {
         navigator.clipboard.writeText(text).then(() => { b.textContent = 'Copié'; });
     });
     geminiAnswer.appendChild(b);
+}
+
+function addCorrectButton(text) {
+    const old = geminiBlock.querySelector('.correct-btn');
+    if (old) old.remove();
+    const b = document.createElement('button');
+    b.className = 'btn btn-ghost correct-btn';
+    b.textContent = 'Corriger cette réponse';
+    b.style.marginTop = '10px';
+    b.addEventListener('click', () => openCorrection(text));
+
+    // évite d'empiler plusieurs boutons si on rappelle addCopyButton
+    const box = geminiBlock.querySelector('.correction-box');
+    if (box) box.remove();
+    geminiBlock.appendChild(b);
+}
+
+function openCorrection(text) {
+    const old = geminiBlock.querySelector('.correction-box');
+    if (old) old.remove();
+    const box = document.createElement('div');
+    box.className = 'correction-box';
+
+    const label = document.createElement('p');
+    label.className = 'correction-label';
+    label.textContent = 'Modifie le corrigé ci-dessous. La version corrigée remplacera la réponse mémorisée sur cet appareil.';
+
+    const ta = document.createElement('textarea');
+    ta.className = 'correction-input';
+    ta.value = text || '';
+    ta.rows = 10;
+    ta.setAttribute('aria-label', 'Corrigé à modifier');
+
+    const actions = document.createElement('div');
+    actions.className = 'correction-actions';
+    const save = document.createElement('button');
+    save.className = 'btn btn-small';
+    save.textContent = 'Enregistrer la correction';
+    const cancel = document.createElement('button');
+    cancel.className = 'btn btn-ghost';
+    cancel.textContent = 'Annuler';
+    actions.appendChild(save);
+    actions.appendChild(cancel);
+
+    box.appendChild(label);
+    box.appendChild(ta);
+    box.appendChild(actions);
+    geminiBlock.appendChild(box);
+    if (ta.focus) ta.focus();
+
+    cancel.addEventListener('click', () => box.remove());
+    save.addEventListener('click', () => {
+        const v = ta.value.trim();
+        if (!v) { alert('La correction est vide.'); return; }
+        lastAiText = v;
+        geminiAnswer.innerHTML = mdToHtml(v);
+        addCopyButton(v);
+        addCorrectButton(v);
+
+        [lastHash, lastImgHash].forEach(h => {
+            if (!h) return;
+            const c = cacheGet(h);
+            if (c) { c.aiText = v; cacheSet(h, c); }
+        });
+        if (lastHash && !cacheGet(lastHash)) cacheSet(lastHash, { text: lastText, aiText: v });
+        if (lastImgHash && !cacheGet(lastImgHash)) cacheSet(lastImgHash, { text: lastText, aiText: v });
+
+        box.remove();
+        geminiStatus.textContent = 'Correction enregistrée dans le cache de cet appareil.';
+    });
 }
 
 btnGemini.addEventListener('click', askAI);
@@ -2815,6 +2887,7 @@ async function applyCached(c) {
         geminiAnswer.innerHTML = mdToHtml(c.aiText);
         geminiStatus.textContent = 'Résultat en cache (instantané).';
         addCopyButton(c.aiText);
+        addCorrectButton(c.aiText);
     } else if (needsHelp) {
         geminiStatus.textContent = 'Résultat en cache. Tu peux demander un corrigé détaillé.';
     } else {
@@ -2839,6 +2912,7 @@ async function analyzeScreen() {
 
     // ── Cache niveau 1 : même image exacte (instantané, sans OCR) ──
     const imgHash = await computeImageHash().catch(() => null);
+    lastImgHash = imgHash;
     if (imgHash && !forceRefresh) {
         const cached = cacheGet(imgHash);
         if (cached) {
