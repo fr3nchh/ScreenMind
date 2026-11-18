@@ -2603,10 +2603,11 @@ async function askAI() {
 
     geminiBlock.style.display = 'block';
     btnGemini.disabled = true;
-    geminiAnswer.innerHTML = '';
-    geminiStatus.className = 'hint';
-    geminiStatus.textContent = "Photo envoyée à " + cfg.label + "… (10 à 30 secondes)";
-    showLoading(cfg.label + ' lit la photo et prépare le corrigé...');
+    try {
+        geminiAnswer.innerHTML = '';
+        geminiStatus.className = 'hint';
+        geminiStatus.textContent = "Photo envoyée à " + cfg.label + "… (10 à 30 secondes)";
+        showLoading(cfg.label + ' lit la photo et prépare le corrigé...');
 
     const prompt =
         "Tu es un professeur patient et rigoureux.\n" +
@@ -2645,6 +2646,14 @@ async function askAI() {
     geminiStatus.textContent = cfg.label + ' : ' + lastError;
     btnGemini.disabled = false;
     hideLoading();
+    } catch (err) {
+        console.error('Erreur IA:', err);
+        geminiStatus.className = 'hint warn';
+        geminiStatus.textContent = cfg.label + ' : ' + (err && err.message ? err.message : err);
+    } finally {
+        btnGemini.disabled = false;
+        hideLoading();
+    }
 }
 
 // Ancien nom conservé pour compatibilité
@@ -2729,7 +2738,8 @@ async function analyzeScreen() {
     }
 
     showLoading('Préparation...');
-    let text = '';
+    try {
+        let text = '';
     let ocrOk = true;
 
     if (extractedText) {
@@ -2814,6 +2824,12 @@ async function analyzeScreen() {
     searchWeb(langCode, query, allCategories[detection.subject] ? allCategories[detection.subject].name : query);
 
     hideLoading();
+    } catch (err) {
+        console.error('Erreur analyse:', err);
+        alert("Erreur lors de l'analyse : " + (err && err.message ? err.message : err));
+    } finally {
+        hideLoading();
+    }
 }
 
 btnAnalyze.addEventListener('click', () => {
