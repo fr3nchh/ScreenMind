@@ -27,7 +27,7 @@
                     <canvas id="canvas" style="display:none;"></canvas>
                     <img id="preview" alt="Aperçu de la photo">
                     <div id="placeholder">
-                        <p>Importez une image, prenez une photo ou partagez votre écran</p>
+                        <p>Importez une image, un PDF, un fichier texte ou audio, prenez une photo ou partagez votre écran</p>
                     </div>
                     <div id="camera-actions" class="camera-actions">
                         <button id="btn-shot" class="btn btn-success">Valider la photo</button>
@@ -36,13 +36,14 @@
                 </div>
 
                 <div class="buttons">
-                    <button id="btn-file" class="btn btn-ghost">Importer une image</button>
+                    <button id="btn-file" class="btn btn-ghost">Importer un fichier</button>
                     <button id="btn-camera" class="btn btn-ghost">Prendre une photo</button>
                     <button id="btn-capture" class="btn btn-ghost">Partager l'écran</button>
                     <button id="btn-analyze" class="btn btn-primary" disabled>Analyser</button>
                     <button id="btn-reset" class="btn btn-ghost btn-reset" title="Réinitialiser">Recommencer</button>
                 </div>
-                <input type="file" id="file-input" accept="image/*" hidden>
+                <input type="file" id="file-input" accept="image/*,application/pdf,text/*,audio/*" hidden>
+                <p class="file-hint">Formats acceptés : images, PDF, texte (.txt, .md…), audio (.mp3, .wav…)</p>
 
                 <div class="option-row">
                     <label for="ocr-lang">Langue écrite sur la photo</label>

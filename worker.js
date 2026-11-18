@@ -28,18 +28,48 @@ export default {
         if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
         if (request.method !== 'POST') return new Response('ScreenMind proxy OK', { headers: cors });
 
-        let prompt, image, model;
+        let prompt, image, model, audio, mime;
         try {
             const body = await request.json();
             prompt = body.prompt;
             image = body.image;
             model = body.model;
+            audio = body.audio;
+            mime = body.mime;
         } catch (e) {
             return new Response(JSON.stringify({ error: 'JSON invalide' }), { status: 400, headers: cors });
         }
 
-        if (!prompt || !image || !image.b64) {
-            return new Response(JSON.stringify({ error: 'Requête invalide (prompt/image manquant)' }), { status: 400, headers: cors });
+        // ── Transcription audio (Groq Whisper) ──
+        if (audio) {
+            if (!env.GROQ_KEY) {
+                return new Response(JSON.stringify({ error: 'GROQ_KEY manquante sur le Worker (ajoute-la dans Variables and Secrets)' }), { status: 500, headers: cors });
+            }
+            try {
+                const bin = atob(audio);
+                const bytes = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                const fd = new FormData();
+                fd.append('file', new Blob([bytes], { type: mime || 'audio/mpeg' }), 'audio.mp3');
+                fd.append('model', 'whisper-large-v3');
+                const r = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + env.GROQ_KEY },
+                    body: fd
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok) {
+                    const msg = (data.error && (data.error.message || data.error)) || ('HTTP ' + r.status);
+                    return new Response(JSON.stringify({ error: typeof msg === 'string' ? msg : JSON.stringify(msg) }), { status: r.status, headers: cors });
+                }
+                return new Response(JSON.stringify({ text: (data.text || '').trim() }), { status: 200, headers: cors });
+            } catch (e) {
+                return new Response(JSON.stringify({ error: 'Transcription : ' + e }), { status: 500, headers: cors });
+            }
+        }
+
+        if (!prompt) {
+            return new Response(JSON.stringify({ error: 'Requête invalide (prompt manquant)' }), { status: 400, headers: cors });
         }
         if (!env.OPENROUTER_KEY) {
             return new Response(JSON.stringify({ error: 'OPENROUTER_KEY manquante sur le Worker' }), { status: 500, headers: cors });
@@ -51,6 +81,12 @@ export default {
         for (const m of models) {
             let res;
             try {
+                const content = image
+                    ? [
+                        { type: 'text', text: prompt },
+                        { type: 'image_url', image_url: { url: 'data:' + (image.mime || 'image/png') + ';base64,' + image.b64 } }
+                    ]
+                    : prompt;
                 res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                     method: 'POST',
                     headers: {
@@ -61,13 +97,7 @@ export default {
                     },
                     body: JSON.stringify({
                         model: m,
-                        messages: [{
-                            role: 'user',
-                            content: [
-                                { type: 'text', text: prompt },
-                                { type: 'image_url', image_url: { url: 'data:' + (image.mime || 'image/png') + ';base64,' + image.b64 } }
-                            ]
-                        }],
+                        messages: [{ role: 'user', content: content }],
                         temperature: 0.3
                     })
                 });

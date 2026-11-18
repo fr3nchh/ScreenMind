@@ -40,7 +40,7 @@ body {
 }
 
 .container {
-    max-width: 960px;
+    max-width: 760px;
     margin: 0 auto;
     padding: 32px 24px 48px;
 }
@@ -103,8 +103,8 @@ header h1 {
 
 /* ─────────── Main grid ─────────── */
 .main-content {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 24px;
     margin-top: 8px;
 }
@@ -848,6 +848,19 @@ footer {
 }
 .ocr-details[open] summary { margin-bottom: 10px; }
 #detected-text { max-height: 300px; }
+
+.file-hint {
+    margin-top: 10px;
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-align: center;
+}
+
+#preview-container.drag-over {
+    outline: 2px dashed var(--orange);
+    outline-offset: -6px;
+    background: var(--orange-soft);
+}
 
 /* ─────────── Responsive ─────────── */
 @media (max-width: 768px) {

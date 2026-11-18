@@ -1569,6 +1569,8 @@ const step3          = $('step-3');
 
 let inputMode    = null;   // 'file' | 'camera' | 'screen'
 let imageDataUrl = null;   // base64 sans préfixe data:
+let extractedText = null;  // texte lu depuis un fichier non-image (PDF, txt, audio)
+let sourceType = 'image';  // 'image' | 'pdf' | 'text' | 'audio'
 let imageMime    = 'image/png';
 let lastText     = '';
 let lastLang     = 'fr';
@@ -1871,14 +1873,167 @@ function otsuThreshold(hist, total) {
 // ═══════════════════════════════════════════════════════
 btnFile.addEventListener('click', () => fileInput.click());
 
-fileInput.addEventListener('change', e => {
+fileInput.addEventListener('change', async e => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
-    const r = new FileReader();
-    r.onload = () => { inputMode = 'file'; setImage(r.result); };
-    r.readAsDataURL(f);
+    inputMode = 'file';
+    resetExtracted();
+    try { await processFile(f); }
+    catch (err) { alert("Fichier illisible : " + err.message); }
     fileInput.value = '';
 });
+
+// Glisser-déposer
+const previewContainer = $('preview-container');
+if (previewContainer) {
+    ['dragenter','dragover'].forEach(ev => previewContainer.addEventListener(ev, e => { e.preventDefault(); previewContainer.classList.add('drag-over'); }));
+    ['dragleave','drop'].forEach(ev => previewContainer.addEventListener(ev, e => { e.preventDefault(); previewContainer.classList.remove('drag-over'); }));
+    previewContainer.addEventListener('drop', async e => {
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!f) return;
+        inputMode = 'file';
+        resetExtracted();
+        try { await processFile(f); }
+        catch (err) { alert("Fichier illisible : " + err.message); }
+    });
+}
+
+function resetExtracted() {
+    extractedText = null;
+    sourceType = 'image';
+}
+
+function readFileAsDataURL(f) {
+    return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = () => rej(r.error || new Error('lecture impossible'));
+        r.readAsDataURL(f);
+    });
+}
+function readFileAsText(f) {
+    return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result || ''));
+        r.onerror = () => rej(r.error || new Error('lecture impossible'));
+        r.readAsText(f);
+    });
+}
+function readFileAsBase64(f) {
+    return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result || '').split(',')[1] || '');
+        r.onerror = () => rej(r.error || new Error('lecture impossible'));
+        r.readAsDataURL(f);
+    });
+}
+
+function showTextPreview(text, name) {
+    previewImg.classList.remove('active');
+    placeholder.style.display = 'flex';
+    placeholder.innerHTML = '<p><strong>' + (name || 'Fichier') + '</strong><br>' +
+        text.length + ' caractères lus. Cliquez sur « Analyser ».</p>';
+    btnAnalyze.disabled = false;
+    if (step2) step2.classList.add('is-active');
+}
+
+async function processFile(f) {
+    const type = (f.type || '').toLowerCase();
+    const name = (f.name || '').toLowerCase();
+    if (type.startsWith('image/')) {
+        sourceType = 'image';
+        const dataUrl = await readFileAsDataURL(f);
+        setImage(dataUrl);
+        return;
+    }
+    if (type === 'application/pdf' || name.endsWith('.pdf')) {
+        sourceType = 'pdf';
+        showLoading('Lecture du PDF...');
+        const { text, dataUrl } = await readPdf(f);
+        extractedText = text || '';
+        if (dataUrl) setImage(dataUrl);
+        else showTextPreview(extractedText, f.name);
+        hideLoading();
+        if (!extractedText.trim() && !imageDataUrl) throw new Error('PDF vide ou illisible');
+        return;
+    }
+    if (type.startsWith('text/') || /\.(txt|md|csv|json|log|html?|xml|rtf)$/i.test(name)) {
+        sourceType = 'text';
+        const text = await readFileAsText(f);
+        extractedText = text;
+        showTextPreview(text, f.name);
+        return;
+    }
+    if (type.startsWith('audio/')) {
+        sourceType = 'audio';
+        showLoading('Transcription audio...');
+        const text = await transcribeAudio(f);
+        extractedText = text;
+        showTextPreview(text, f.name);
+        hideLoading();
+        return;
+    }
+    // Fallback : tenter comme texte
+    try {
+        const text = await readFileAsText(f);
+        if (text && text.trim()) {
+            sourceType = 'text';
+            extractedText = text;
+            showTextPreview(text, f.name);
+            return;
+        }
+    } catch (e) { /* ignore */ }
+    throw new Error('Format non supporté : ' + (f.type || f.name));
+}
+
+async function readPdf(f) {
+    if (!window.pdfjsLib) {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+        if (window.pdfjsLib) window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    const ab = await f.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: ab }).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const tc = await page.getTextContent();
+        text += tc.items.map(it => it.str).join(' ') + '\\n';
+    }
+    let dataUrl = null;
+    try {
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 2 });
+        const c = document.createElement('canvas');
+        c.width = viewport.width; c.height = viewport.height;
+        const ctx = c.getContext('2d');
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        dataUrl = c.toDataURL('image/png');
+    } catch (e) { /* ignore */ }
+    return { text: (text || '').trim(), dataUrl };
+}
+
+async function transcribeAudio(f) {
+    const b64 = await readFileAsBase64(f);
+    const res = await fetch(PROXY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audio: b64, mime: f.type || 'audio/mpeg' })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    return (data.text || '').trim();
+}
+
+function loadScript(src) {
+    return new Promise((res, rej) => {
+        if (document.querySelector('script[src=\"' + src + '\"]')) { res(); return; }
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = () => res();
+        s.onerror = () => rej(new Error('chargement ' + src));
+        document.head.appendChild(s);
+    });
+}
 
 btnCamera.addEventListener('click', async () => {
     try {
@@ -1931,6 +2086,8 @@ function resetAll() {
     btnAnalyze.disabled = true;
     results.style.display = 'none';
     imageDataUrl = null;
+    extractedText = null;
+    sourceType = 'image';
     inputMode = null;
     lastText = ''; localAnswers = []; unsolvedCount = 0; needsHelp = false;
     if (step2) step2.classList.remove('is-active');
@@ -2343,17 +2500,13 @@ async function compressForApi(b64, mime) {
 
 // Appel à l'API Google Gemini (format natif)
 async function callGemini(key, prompt, img, model) {
+    const parts = [{ text: prompt }];
+    if (img) parts.push({ inline_data: { mime_type: img.mime, data: img.b64 } });
     const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + encodeURIComponent(key), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            contents: [{
-                role: 'user',
-                parts: [
-                    { text: prompt },
-                    { inline_data: { mime_type: img.mime, data: img.b64 } }
-                ]
-            }],
+            contents: [{ role: 'user', parts: parts }],
             generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
         })
     });
@@ -2364,8 +2517,8 @@ async function callGemini(key, prompt, img, model) {
         e.retryable = (res.status === 404 || res.status === 429 || res.status >= 500);
         throw e;
     }
-    const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
-    const text = parts.map(p => p.text || '').join('').trim();
+    const resParts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
+    const text = resParts.map(p => p.text || '').join('').trim();
     if (!text) throw new Error('Réponse vide du modèle');
     return text;
 }
@@ -2380,18 +2533,18 @@ async function callOpenAICompatible(cfg, key, prompt, img, model) {
         headers['HTTP-Referer'] = (typeof location !== 'undefined' && location && location.origin) ? location.origin : 'https://fr3nchh.github.io';
         headers['X-Title'] = 'ScreenMind';
     }
+    const content = img
+        ? [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: 'data:' + img.mime + ';base64,' + img.b64 } }
+        ]
+        : prompt;
     const res = await fetch(cfg.endpoint, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify({
             model: model,
-            messages: [{
-                role: 'user',
-                content: [
-                    { type: 'text', text: prompt },
-                    { type: 'image_url', image_url: { url: 'data:' + img.mime + ';base64,' + img.b64 } }
-                ]
-            }],
+            messages: [{ role: 'user', content: content }],
             temperature: 0.3
         })
     });
@@ -2402,23 +2555,22 @@ async function callOpenAICompatible(cfg, key, prompt, img, model) {
         e.retryable = (res.status === 404 || res.status === 429 || res.status >= 500);
         throw e;
     }
-    let content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-    if (Array.isArray(content)) content = content.map(c => (c && c.text) || '').join('');
-    content = (content || '').trim();
-    if (!content) throw new Error('Réponse vide du modèle');
-    return content;
+    let resultContent = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if (Array.isArray(resultContent)) resultContent = resultContent.map(c => (c && c.text) || '').join('');
+    resultContent = (resultContent || '').trim();
+    if (!resultContent) throw new Error('Réponse vide du modèle');
+    return resultContent;
 }
 
 // Appel via le proxy (clé stockée côté serveur, jamais dans le site)
 async function callProxy(prompt, img, model) {
+    const body = { prompt: prompt };
+    if (img) body.image = { mime: img.mime, b64: img.b64 };
+    if (model) body.model = model;
     const res = await fetch(PROXY_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            prompt: prompt,
-            image: { mime: img.mime, b64: img.b64 },
-            model: model || undefined
-        })
+        body: JSON.stringify(body)
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -2443,7 +2595,7 @@ async function askAI() {
         if (apiKeyInput) apiKeyInput.focus();
         return;
     }
-    if (!imageDataUrl) return;
+    if (!imageDataUrl && !extractedText) return;
 
     const L = LANG_TABLE[lastLang] || LANG_TABLE.fr;
     let models = [getModel(p)].concat(cfg.models || []).filter((m, i, a) => m && a.indexOf(m) === i);
@@ -2458,14 +2610,15 @@ async function askAI() {
 
     const prompt =
         "Tu es un professeur patient et rigoureux.\n" +
-        "La photo ci-jointe est un énoncé d'exercice, de devoir, de contrôle ou un document quelconque.\n" +
-        "1. Détermine la langue du texte de la photo.\n" +
+        "Le texte ci-dessous (ou la photo ci-jointe) est un énoncé d'exercice, de devoir, de contrôle ou un document quelconque.\n" +
+        (extractedText ? ("Texte du document :\n---\n" + extractedText.slice(0, 12000) + "\n---\n") : "") +
+        "1. Détermine la langue du texte.\n" +
         "2. Donne LA RÉPONSE COMPLÈTE de chaque question/exercice, étape par étape, en justifiant brièvement.\n" +
-        "3. Réponds TOUJOURS dans la langue du texte de la photo (langue estimée : " + L.name + ").\n" +
+        "3. Réponds TOUJOURS dans la langue du texte (langue estimée : " + L.name + ").\n" +
         "4. Si ce n'est pas un exercice, résume le document en 5 points maximum.\n" +
         "Format Markdown : un titre court par question, des listes à puces pour les étapes, et la réponse finale en gras.";
 
-    const img = await compressForApi(imageDataUrl, imageMime);
+    const img = imageDataUrl ? await compressForApi(imageDataUrl, imageMime) : null;
 
     let lastError = null;
     for (const model of models) {
@@ -2570,36 +2723,40 @@ async function analyzeScreen() {
         const d = frameToDataUrl();
         if (d) setImage(d);
     }
-    if (!imageDataUrl) {
-        alert("Ajoute d'abord une photo (fichier, caméra ou capture d'écran).");
+    if (!imageDataUrl && !extractedText) {
+        alert("Ajoute d'abord un fichier (image, PDF, texte, audio), une photo ou une capture d'écran.");
         return;
     }
 
-    showLoading('Préparation de l\'image...');
+    showLoading('Préparation...');
     let text = '';
     let ocrOk = true;
 
-    try {
-        const ocrImage = await prepareOcrImage(imageDataUrl, imageMime);
-        const langData = ocrLangSel.value || 'fra+eng';
+    if (extractedText) {
+        text = extractedText;
+        ocrOk = true;
+    } else {
+        try {
+            const ocrImage = await prepareOcrImage(imageDataUrl, imageMime);
+            const langData = ocrLangSel.value || 'fra+eng';
 
-        showLoading('Lecture du texte (OCR)...');
-        const result = await Tesseract.recognize(ocrImage, langData, {
-            logger: m => {
-                if (m.status === 'recognizing text') {
-                    loadingText.textContent = 'OCR en cours... ' + Math.round(m.progress * 100) + '%';
-                } else if (m.status === 'loading language core') {
-                    loadingText.textContent = 'Chargement de la langue OCR...';
+            showLoading('Lecture du texte (OCR)...');
+            const result = await Tesseract.recognize(ocrImage, langData, {
+                logger: m => {
+                    if (m.status === 'recognizing text') {
+                        loadingText.textContent = 'OCR en cours... ' + Math.round(m.progress * 100) + '%';
+                    } else if (m.status === 'loading language core') {
+                        loadingText.textContent = 'Chargement de la langue OCR...';
+                    }
                 }
-            }
-        });
-        text = (result.data.text || '').trim();
-    } catch (err) {
-        console.error('Erreur OCR:', err);
-        ocrOk = false;
-        text = '';
+            });
+            text = (result.data.text || '').trim();
+        } catch (err) {
+            console.error('Erreur OCR:', err);
+            ocrOk = false;
+            text = '';
+        }
     }
-
     lastText = text;
 
     // ── 1. Langue du texte
