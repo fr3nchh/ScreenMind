@@ -936,6 +936,13 @@ footer .support-box p {
     text-decoration: none;
 }
 .support-links a:hover { text-decoration: underline; }
+.share-status {
+    display: block;
+    min-height: 1em;
+    margin-top: 8px;
+    font-size: 0.78rem;
+    color: var(--green);
+}
 
 /* ─────────── Responsive ─────────── */
 @media (max-width: 768px) {

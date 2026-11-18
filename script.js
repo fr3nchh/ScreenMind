@@ -1798,6 +1798,20 @@ scheduleOcrPreload();
 if (btnFile) btnFile.addEventListener('click', preloadOcr, { once: true });
 if (btnCamera) btnCamera.addEventListener('click', preloadOcr, { once: true });
 
+// Bouton partager (pied de page)
+const btnShare = $('btn-share');
+const shareStatus = $('share-status');
+if (btnShare) btnShare.addEventListener('click', async () => {
+    const url = (typeof location !== 'undefined' && location && location.href) ? location.href.split('?')[0] : 'https://fr3nchh.github.io/ScreenMind/';
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(url);
+        else throw new Error('Presse-notes indisponible');
+        if (shareStatus) shareStatus.textContent = 'Lien copié dans le presse-notes.';
+    } catch (e) {
+        if (shareStatus) shareStatus.textContent = url;
+    }
+});
+
 // ═══════════════════════════════════════════════════════
 // UTILITAIRES IMAGE / FLUX
 // ═══════════════════════════════════════════════════════
