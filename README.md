@@ -1,8 +1,17 @@
-# 🧠 ScreenMind
+# ScreenMind
 
-**Photo d'un exercice ou d'un contrôle → le site lit le texte, détecte la langue et complète les réponses.**
+> **Site en ligne : https://fr3nchh.github.io/ScreenMind/**
 
-Site 100 % statique (aucun serveur, aucun back-end) : il suffit d'ouvrir `index.html`.
+[![Ouvrir le site](https://img.shields.io/badge/Ouvrir%20le%20site-ScreenMind-e2762f?style=for-the-badge)](https://fr3nchh.github.io/ScreenMind/)
+
+**Photo d'un exercice ou d'un contrôle → le site lit le texte, détecte la langue et trouve les réponses.**
+
+Le site fonctionne directement dans le navigateur. Il accepte les **images, PDF, fichiers texte et audio**.
+
+![Aperçu du site](screenshot.png)
+
+> Pour ajouter une capture d'écran : dépose ton image dans le dépôt sous le nom `screenshot.png`
+> (ou change le nom dans la ligne ci-dessus).
 
 ## Fonctionnement
 
