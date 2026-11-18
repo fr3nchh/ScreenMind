@@ -2740,18 +2740,22 @@ async function searchWeb(langCode, query, subjectName) {
 const CACHE_PREFIX = 'screenmind_cache_';
 const CACHE_TTL = 30 * 24 * 3600 * 1000; // 30 jours
 
-async function computeHash() {
-    const src = extractedText ? ('T:' + extractedText) : ('I:' + (imageDataUrl || ''));
+async function hashString(src) {
     try {
         const buf = new TextEncoder().encode(src);
         const digest = await crypto.subtle.digest('SHA-256', buf);
         return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
     } catch (e) {
-        // Fallback simple si crypto indisponible
         let h = 0;
         for (let i = 0; i < src.length; i++) h = (h * 31 + src.charCodeAt(i)) >>> 0;
         return 'fb_' + h.toString(16);
     }
+}
+async function computeImageHash() {
+    return imageDataUrl ? await hashString('I:' + imageDataUrl) : null;
+}
+async function computeTextHash(text) {
+    return text && text.trim() ? await hashString('T:' + text.trim()) : null;
 }
 
 function cacheGet(hash) {
@@ -2833,21 +2837,22 @@ async function analyzeScreen() {
         return;
     }
 
+    // ── Cache niveau 1 : même image exacte (instantané, sans OCR) ──
+    const imgHash = await computeImageHash().catch(() => null);
+    if (imgHash && !forceRefresh) {
+        const cached = cacheGet(imgHash);
+        if (cached) {
+            forceRefresh = false;
+            lastHash = imgHash;
+            await applyCached(cached);
+            return;
+        }
+    }
+    // forceRefresh conservé pour le niveau 2 (réinitialisé en finally)
+
     showLoading('Préparation...');
     try {
-        // ── Cache : exercice déjà vu ? ──
-        const hash = await computeHash().catch(() => null);
-        lastHash = hash;
-        if (hash && !forceRefresh) {
-            const cached = cacheGet(hash);
-            if (cached) {
-                forceRefresh = false;
-                await applyCached(cached);
-                return;
-            }
-        }
-        forceRefresh = false;
-
+        // ── Cache niveau 2 : même texte (photo différente du même exercice) ──
         lastAiText = null;
         let text = '';
     let ocrOk = true;
@@ -2878,6 +2883,19 @@ async function analyzeScreen() {
         }
     }
     lastText = text;
+
+    // ── Cache niveau 2 : même texte (photo différente du même exercice) ──
+    const txtHash = await computeTextHash(text).catch(() => null);
+    if (txtHash && !forceRefresh) {
+        const cached = cacheGet(txtHash);
+        if (cached) {
+            forceRefresh = false;
+            lastHash = txtHash;
+            await applyCached(cached);
+            return;
+        }
+    }
+    if (txtHash) lastHash = txtHash;
 
     // ── 1. Langue du texte
     const langCode = detectLanguage(text);
@@ -2933,20 +2951,23 @@ async function analyzeScreen() {
     const query = firstQuestion ? firstQuestion.slice(0, 120) : (detection.matchedKeywords || []).slice(0, 4).join(' ') || 'exercice';
     searchWeb(langCode, query, allCategories[detection.subject] ? allCategories[detection.subject].name : query);
 
-    cacheSet(lastHash, {
+    const cacheData = {
         text: text,
         langCode: langCode,
         detection: detection,
         answers: localAnswers,
         unsolved: unsolvedCount,
         aiText: lastAiText
-    });
+    };
+    cacheSet(lastHash, cacheData);
+    if (imgHash && imgHash !== lastHash) cacheSet(imgHash, cacheData);
 
     hideLoading();
     } catch (err) {
         console.error('Erreur analyse:', err);
         alert("Erreur lors de l'analyse : " + (err && err.message ? err.message : err));
     } finally {
+        forceRefresh = false;
         hideLoading();
     }
 }
