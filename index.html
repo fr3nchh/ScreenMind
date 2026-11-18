@@ -72,15 +72,36 @@
 
                 <div class="api-box">
                     <details id="api-details">
-                        <summary>🔑 Clé Gemini <span class="api-hint">— pour les exercices trop complexes</span></summary>
+                        <summary>🔑 Clé IA <span class="api-hint">— pour les exercices trop complexes</span></summary>
                         <p>Le site fait tout seul ce qu'il peut : lecture du texte, langue, matière, calculs et équations.
-                           Si l'énoncé est trop complexe pour lui, il envoie la photo à <strong>Gemini</strong> et te renvoie le corrigé complet.</p>
+                           Si l'énoncé est trop complexe pour lui, il envoie la photo à l'IA et te renvoie le corrigé complet,
+                           dans la langue de l'image. Choisis le fournisseur dont tu as (ou veux) une clé :</p>
+
+                        <label class="field-label" for="api-provider">Fournisseur</label>
                         <div class="api-line">
-                            <input type="password" id="api-key" placeholder="Colle ta clé API Gemini ici" autocomplete="off">
+                            <select id="api-provider">
+                                <option value="gemini">Google Gemini</option>
+                                <option value="openrouter">OpenRouter (gratuit)</option>
+                                <option value="groq">Groq (gratuit)</option>
+                                <option value="mistral">Mistral AI (gratuit)</option>
+                                <option value="openai">OpenAI (payant)</option>
+                            </select>
+                        </div>
+
+                        <label class="field-label" for="api-key">Clé API</label>
+                        <div class="api-line">
+                            <input type="password" id="api-key" placeholder="Colle ta clé ici" autocomplete="off">
                             <button id="btn-save-key" class="btn btn-small">Enregistrer</button>
                         </div>
                         <span id="key-status" class="key-status"></span>
-                        <a class="api-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">🔑 Obtenir une clé gratuite (Google AI Studio) →</a>
+
+                        <label class="field-label" for="api-model">Modèle <span class="api-hint">(optionnel — laisse vide si tu ne sais pas)</span></label>
+                        <div class="api-line">
+                            <input type="text" id="api-model" placeholder="Modèle utilisé" autocomplete="off">
+                        </div>
+
+                        <p id="api-help" class="api-help"></p>
+                        <a id="api-link" class="api-link" href="#" target="_blank" rel="noopener">🔑 Obtenir une clé →</a>
                     </details>
                 </div>
             </section>
@@ -144,7 +165,7 @@
         </div>
 
         <footer>
-            <p>OCR local (Tesseract.js) • Résolution automatique • Gemini en secours si c'est trop complexe</p>
+            <p>OCR local (Tesseract.js) • Résolution automatique • Gemini / OpenRouter / Groq / Mistral / OpenAI en secours si c'est trop complexe</p>
         </footer>
     </div>
 

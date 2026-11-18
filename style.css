@@ -642,8 +642,9 @@ footer {
 .api-box details[open] summary::before { content: "▾ "; }
 .api-hint { color: #8888aa; font-weight: 400; font-size: 0.82rem; }
 .api-box p { font-size: 0.83rem; color: #a0a0c0; line-height: 1.5; margin: 10px 0; }
-.api-line { display: flex; gap: 8px; }
-.api-line input {
+.api-line { display: flex; gap: 8px; flex-wrap: wrap; }
+.api-line input,
+.api-line select {
     flex: 1;
     min-width: 0;
     background: rgba(0,0,0,0.35);
@@ -653,6 +654,25 @@ footer {
     padding: 10px 12px;
     font-size: 0.88rem;
     outline: none;
+}
+.api-line select { flex: 0 0 100%; cursor: pointer; }
+.api-line select option { background: #1b1b2f; }
+.api-line .btn { flex: 0 0 auto; }
+.field-label {
+    display: block;
+    margin-top: 12px;
+    margin-bottom: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #a0a0c0;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.api-help {
+    font-size: 0.8rem;
+    color: #8888aa;
+    line-height: 1.5;
+    margin: 10px 0 0;
 }
 .key-status { display: block; font-size: 0.8rem; color: #ffd200; margin-top: 8px; }
 .key-status.ok { color: #38ef7d; }

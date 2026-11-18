@@ -1545,6 +1545,10 @@ const btnShotCancel  = $('btn-shot-cancel');
 const cameraActions  = $('camera-actions');
 const ocrLangSel     = $('ocr-lang');
 const apiKeyInput    = $('api-key');
+const apiModelInput  = $('api-model');
+const apiProviderSel = $('api-provider');
+const apiHelpEl      = $('api-help');
+const apiLinkEl      = $('api-link');
 const btnSaveKey     = $('btn-save-key');
 const keyStatus      = $('key-status');
 const apiDetails     = $('api-details');
@@ -1563,8 +1567,6 @@ const wikipediaEl    = $('wikipedia-result');
 const step2          = $('step-2');
 const step3          = $('step-3');
 
-const LS_KEY = 'screenmind_gemini_key';
-
 let inputMode    = null;   // 'file' | 'camera' | 'screen'
 let imageDataUrl = null;   // base64 sans préfixe data:
 let imageMime    = 'image/png';
@@ -1576,31 +1578,132 @@ let unsolvedCount = 0;
 let needsHelp    = false;
 
 // ═══════════════════════════════════════════════════════
-// CLÉ API GEMINI
+// FOURNISSEURS D'IA & CLÉS
 // ═══════════════════════════════════════════════════════
+const LS_PROVIDER  = 'screenmind_provider';
+const LS_KEY_PRE   = 'screenmind_key_';
+const LS_MODEL_PRE = 'screenmind_model_';
+const LS_LEGACY    = 'screenmind_gemini_key';   // ancien emplacement (avant multi-fournisseurs)
+
+const PROVIDERS = {
+    gemini: {
+        label: 'Google Gemini',
+        kind: 'gemini',
+        keyUrl: 'https://aistudio.google.com/app/apikey',
+        keyHint: 'Gratuite sur Google AI Studio. Elle peut être refusée (403) si ton compte a moins de 18 ans, si ta région n\'est pas supportée ou si c\'un compte Éducation.',
+        models: ['gemini-2.5-flash', 'gemini-2.0-flash'],
+        fallback: 'Modèles possibles : gemini-2.5-flash, gemini-2.0-flash',
+        defaultModel: ''
+    },
+    openrouter: {
+        label: 'OpenRouter',
+        kind: 'openai',
+        endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+        keyUrl: 'https://openrouter.ai/keys',
+        keyHint: 'Gratuite, aucune carte bancaire, pas de blocage géo — la meilleure alternative si Google te bloque.',
+        fallback: 'Modèles gratuits avec image : nvidia/nemotron-3.5-super-vl:free, google/gemma-4-26b-a4b-it:free, ou openrouter/free',
+        defaultModel: 'nvidia/nemotron-3.5-super-vl:free'
+    },
+    groq: {
+        label: 'Groq',
+        kind: 'openai',
+        endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+        keyUrl: 'https://console.groq.com/keys',
+        keyHint: 'Gratuite, aucune carte bancaire, très rapide.',
+        fallback: 'Modèles avec image : meta-llama/llama-4-scout-17b-16e-instruct, qwen/qwen3.8-27b',
+        defaultModel: 'meta-llama/llama-4-scout-17b-16e-instruct'
+    },
+    mistral: {
+        label: 'Mistral AI',
+        kind: 'openai',
+        endpoint: 'https://api.mistral.ai/v1/chat/completions',
+        keyUrl: 'https://console.mistral.ai/api-keys',
+        keyHint: 'Entreprise française, offre gratuite sur La Plateforme.',
+        fallback: 'Le modèle doit accepter les images (vision), sinon change-le ici.',
+        defaultModel: 'mistral-small-latest'
+    },
+    openai: {
+        label: 'OpenAI',
+        kind: 'openai',
+        endpoint: 'https://api.openai.com/v1/chat/completions',
+        keyUrl: 'https://platform.openai.com/api-keys',
+        keyHint: 'Offre payante.',
+        fallback: 'Modèles peu chers avec image : gpt-5-nano, gpt-5.4-nano, gpt-4.1-mini',
+        defaultModel: 'gpt-5-nano'
+    }
+};
+
+// Migration de l'ancienne clé Gemini unique vers le nouveau système
+try {
+    const legacy = localStorage.getItem(LS_LEGACY);
+    if (legacy && !localStorage.getItem(LS_KEY_PRE + 'gemini')) {
+        localStorage.setItem(LS_KEY_PRE + 'gemini', legacy);
+    }
+} catch (e) { }
+
+function currentProvider() {
+    const p = localStorage.getItem(LS_PROVIDER);
+    return (p && PROVIDERS[p]) ? p : 'gemini';
+}
+function storedKey(p) { return (localStorage.getItem(LS_KEY_PRE + p) || '').trim(); }
+function storedModel(p) { return (localStorage.getItem(LS_MODEL_PRE + p) || '').trim(); }
+
 function getApiKey() {
     const fromInput = apiKeyInput ? apiKeyInput.value.trim() : '';
-    return fromInput || (localStorage.getItem(LS_KEY) || '').trim();
+    return fromInput || storedKey(currentProvider());
 }
 
-if (apiKeyInput) apiKeyInput.value = localStorage.getItem(LS_KEY) || '';
-if (keyStatus && localStorage.getItem(LS_KEY)) {
-    keyStatus.textContent = '✅ Clé déjà enregistrée dans ce navigateur';
-    keyStatus.classList.add('ok');
+function getModel(p) {
+    return storedModel(p) || (PROVIDERS[p].defaultModel || '');
 }
+
+function refreshProviderUI() {
+    const p = currentProvider();
+    const cfg = PROVIDERS[p];
+    if (apiProviderSel) apiProviderSel.value = p;
+    if (apiKeyInput) apiKeyInput.value = storedKey(p);
+    if (apiModelInput) {
+        apiModelInput.value = storedModel(p) || cfg.defaultModel;
+        apiModelInput.placeholder = cfg.defaultModel ? 'Défaut : ' + cfg.defaultModel : 'Modèle utilisé';
+    }
+    if (apiLinkEl) {
+        apiLinkEl.href = cfg.keyUrl;
+        apiLinkEl.textContent = '🔑 Obtenir une clé ' + cfg.label + ' →';
+    }
+    if (apiHelpEl) apiHelpEl.textContent = cfg.keyHint + '  •  ' + cfg.fallback;
+    if (keyStatus) {
+        const has = storedKey(p);
+        keyStatus.textContent = has
+            ? '✅ Clé ' + cfg.label + ' enregistrée dans ce navigateur'
+            : 'Aucune clé enregistrée pour ' + cfg.label;
+        keyStatus.classList[has ? 'add' : 'remove']('ok');
+    }
+}
+
+if (apiProviderSel) apiProviderSel.addEventListener('change', () => {
+    localStorage.setItem(LS_PROVIDER, apiProviderSel.value);
+    refreshProviderUI();
+});
 
 if (btnSaveKey) btnSaveKey.addEventListener('click', () => {
+    const p = currentProvider();
+    const cfg = PROVIDERS[p];
     const v = apiKeyInput.value.trim();
-    if (!v) {
-        localStorage.removeItem(LS_KEY);
-        keyStatus.textContent = 'Clé effacée.';
-        keyStatus.classList.remove('ok');
-    } else {
-        localStorage.setItem(LS_KEY, v);
-        keyStatus.textContent = '✅ Clé enregistrée';
-        keyStatus.classList.add('ok');
+    if (v) localStorage.setItem(LS_KEY_PRE + p, v);
+    else localStorage.removeItem(LS_KEY_PRE + p);
+
+    const m = apiModelInput ? apiModelInput.value.trim() : '';
+    if (m && m !== cfg.defaultModel) localStorage.setItem(LS_MODEL_PRE + p, m);
+    else localStorage.removeItem(LS_MODEL_PRE + p);
+
+    refreshProviderUI();
+    if (keyStatus) {
+        keyStatus.textContent = v ? '✅ Clé ' + cfg.label + ' enregistrée' : 'Clé effacée.';
+        keyStatus.classList[v ? 'add' : 'remove']('ok');
     }
 });
+
+refreshProviderUI();
 
 // ═══════════════════════════════════════════════════════
 // UTILITAIRES IMAGE / FLUX
@@ -2133,7 +2236,7 @@ function renderAnswers(list, unsolved) {
 }
 
 // ═══════════════════════════════════════════════════════
-// MARKDOWN SIMPLE (sortie Gemini)
+// MARKDOWN SIMPLE (sortie IA)
 // ═══════════════════════════════════════════════════════
 function mdToHtml(md) {
     const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -2168,29 +2271,125 @@ function mdToHtml(md) {
 }
 
 // ═══════════════════════════════════════════════════════
-// GEMINI (secours quand c'est trop complexe)
+// IA DE SECOURS (quand c'est trop complexe pour le site)
 // ═══════════════════════════════════════════════════════
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
 
-async function askGemini() {
+// Compresse la photo en JPEG (max 1600px) pour ne pas exploser les API
+async function compressForApi(b64, mime) {
+    const raw = 'data:' + (mime || 'image/png') + ';base64,' + b64;
+    try {
+        const img = new Image();
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = raw; });
+        const maxSide = 1600;
+        const scale = Math.min(1, maxSide / Math.max(img.width || 0, img.height || 0));
+        if (!(img.width > 0) || !(img.height > 0) || scale === 1) return { mime: mime, b64: b64 };
+        const w = Math.max(1, Math.round((img.width || 1) * scale));
+        const h = Math.max(1, Math.round((img.height || 1) * scale));
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        if (!ctx) return { mime: mime, b64: b64 };
+        ctx.drawImage(img, 0, 0, w, h);
+        const out = c.toDataURL('image/jpeg', 0.85);
+        const newB64 = out.split(',')[1];
+        if (!newB64) return { mime: mime, b64: b64 };
+        return { mime: 'image/jpeg', b64: newB64 };
+    } catch (e) {
+        return { mime: mime, b64: b64 };   // pas de canvas → on envoie l'original
+    }
+}
+
+// Appel à l'API Google Gemini (format natif)
+async function callGemini(key, prompt, img, model) {
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + encodeURIComponent(key), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{
+                role: 'user',
+                parts: [
+                    { text: prompt },
+                    { inline_data: { mime_type: img.mime, data: img.b64 } }
+                ]
+            }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
+        })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+        const err = (data.error && data.error.message) || ('HTTP ' + res.status);
+        const e = new Error(err);
+        e.retryable = (res.status === 404 || res.status === 429 || res.status >= 500);
+        throw e;
+    }
+    const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
+    const text = parts.map(p => p.text || '').join('').trim();
+    if (!text) throw new Error('Réponse vide du modèle');
+    return text;
+}
+
+// Appel compatible OpenAI (OpenRouter, Groq, Mistral, OpenAI…)
+async function callOpenAICompatible(cfg, key, prompt, img, model) {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + key
+    };
+    if (cfg.endpoint && cfg.endpoint.indexOf('openrouter.ai') !== -1) {
+        headers['HTTP-Referer'] = (typeof location !== 'undefined' && location && location.origin) ? location.origin : 'https://fr3nchh.github.io';
+        headers['X-Title'] = 'ScreenMind';
+    }
+    const res = await fetch(cfg.endpoint, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({
+            model: model,
+            messages: [{
+                role: 'user',
+                content: [
+                    { type: 'text', text: prompt },
+                    { type: 'image_url', image_url: { url: 'data:' + img.mime + ';base64,' + img.b64 } }
+                ]
+            }],
+            temperature: 0.3
+        })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+        const err = (data.error && (data.error.message || data.error)) || ('HTTP ' + res.status);
+        const e = new Error(typeof err === 'string' ? err : JSON.stringify(err));
+        e.retryable = (res.status === 404 || res.status === 429 || res.status >= 500);
+        throw e;
+    }
+    let content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if (Array.isArray(content)) content = content.map(c => (c && c.text) || '').join('');
+    content = (content || '').trim();
+    if (!content) throw new Error('Réponse vide du modèle');
+    return content;
+}
+
+async function askAI() {
+    const p = currentProvider();
+    const cfg = PROVIDERS[p];
     const key = getApiKey();
     if (!key) {
         geminiBlock.style.display = 'block';
-        geminiStatus.textContent = "Il faut ta clé Gemini gratuite pour cet exercice (2 clics, elle reste dans ton navigateur).";
+        geminiStatus.textContent = "Il faut une clé " + cfg.label + " pour cet exercice (2 clics, elle reste dans ton navigateur).";
         geminiStatus.className = 'hint warn';
         if (apiDetails) { apiDetails.open = true; apiDetails.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-        apiKeyInput.focus();
+        if (apiKeyInput) apiKeyInput.focus();
         return;
     }
     if (!imageDataUrl) return;
 
     const L = LANG_TABLE[lastLang] || LANG_TABLE.fr;
+    const models = [getModel(p)].concat(cfg.models || []).filter((m, i, a) => m && a.indexOf(m) === i);
+
     geminiBlock.style.display = 'block';
     btnGemini.disabled = true;
     geminiAnswer.innerHTML = '';
     geminiStatus.className = 'hint';
-    geminiStatus.textContent = "Photo envoyée à Gemini… (10 à 30 secondes)";
-    showLoading('Gemini lit la photo et prépare le corrigé...');
+    geminiStatus.textContent = "Photo envoyée à " + cfg.label + "… (10 à 30 secondes)";
+    showLoading(cfg.label + ' lit la photo et prépare le corrigé...');
 
     const prompt =
         "Tu es un professeur patient et rigoureux.\n" +
@@ -2201,50 +2400,35 @@ async function askGemini() {
         "4. Si ce n'est pas un exercice, résume le document en 5 points maximum.\n" +
         "Format Markdown : un titre court par question, des listes à puces pour les étapes, et la réponse finale en gras.";
 
+    const img = await compressForApi(imageDataUrl, imageMime);
+
     let lastError = null;
-    for (const model of GEMINI_MODELS) {
+    for (const model of models) {
         try {
-            const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + encodeURIComponent(key), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{
-                        role: 'user',
-                        parts: [
-                            { text: prompt },
-                            { inline_data: { mime_type: imageMime, data: imageDataUrl } }
-                        ]
-                    }],
-                    generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
-                })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                const err = (data.error && data.error.message) || ('HTTP ' + res.status);
-                if (res.status === 404) { lastError = err; continue; }   // modèle indisponible → on tente l'autre
-                throw new Error(err);
-            }
-            const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
-            const text = parts.map(p => p.text || '').join('').trim();
-            if (!text) throw new Error('Réponse vide de Gemini');
+            const text = (cfg.kind === 'gemini')
+                ? await callGemini(key, prompt, img, model)
+                : await callOpenAICompatible(cfg, key, prompt, img, model);
 
             geminiAnswer.innerHTML = mdToHtml(text);
-            geminiStatus.textContent = '✅ Corrigé complet généré par ' + model + ' — dans la langue de ton image.';
+            geminiStatus.textContent = '✅ Corrigé complet généré par ' + cfg.label + ' (' + model + ') — dans la langue de ton image.';
             hideLoading();
             btnGemini.disabled = false;
             addCopyButton(text);
             return;
         } catch (err) {
             lastError = err.message || String(err);
-            if (model === GEMINI_MODELS[GEMINI_MODELS.length - 1]) break;
+            if (err.retryable === false) break;
         }
     }
 
     geminiStatus.className = 'hint warn';
-    geminiStatus.textContent = '❌ Gemini : ' + lastError;
+    geminiStatus.textContent = '❌ ' + cfg.label + ' : ' + lastError;
     btnGemini.disabled = false;
     hideLoading();
 }
+
+// Ancien nom conservé pour compatibilité
+async function askGemini() { return askAI(); }
 
 function addCopyButton(text) {
     const old = geminiAnswer.querySelector('.copy-btn');
@@ -2258,7 +2442,7 @@ function addCopyButton(text) {
     geminiAnswer.appendChild(b);
 }
 
-btnGemini.addEventListener('click', askGemini);
+btnGemini.addEventListener('click', askAI);
 
 // ═══════════════════════════════════════════════════════
 // RECHERCHES DANS LA LANGUE DÉTECTÉE
@@ -2382,15 +2566,17 @@ async function analyzeScreen() {
     geminiStatus.className = 'hint';
 
     const key = getApiKey();
+    const aiLabel = PROVIDERS[currentProvider()].label;
     if (needsHelp) {
         if (key) {
             geminiStatus.textContent = localAnswers.length
-                ? "Quelques questions dépassent l'analyse locale → envoi direct à Gemini…"
-                : "Trop complexe pour l'analyse locale → envoi direct à Gemini…";
-            await askGemini();
+                ? "Quelques questions dépassent l'analyse locale → envoi direct à " + aiLabel + "…"
+                : "Trop complexe pour l'analyse locale → envoi direct à " + aiLabel + "…";
+            await askAI();
         } else {
             geminiStatus.className = 'hint warn';
-            geminiStatus.textContent = "Cet exercice demande un corrigé complet. Ajoute ta clé Gemini (gratuite) et le site te donnera les réponses automatiquement, dans la langue de l'image.";
+            geminiStatus.textContent = "Cet exercice demande un corrigé complet. Ajoute ta clé " + aiLabel + " et le site te donnera les réponses automatiquement, dans la langue de l'image.";
+            if (apiDetails) { apiDetails.open = true; }
         }
     } else {
         geminiStatus.textContent = 'Le site a tout résolu lui-même (hors connexion). Tu peux quand même demander un corrigé détaillé.';
