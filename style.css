@@ -902,6 +902,41 @@ footer {
     background: var(--orange-soft);
 }
 
+footer .support-box {
+    max-width: 420px;
+    margin: 16px auto 0;
+    text-align: center;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 14px;
+}
+footer .support-box summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.82rem;
+}
+footer .support-box p {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin: 10px 0;
+    line-height: 1.5;
+}
+.support-links {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+.support-links a {
+    color: var(--orange);
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+.support-links a:hover { text-decoration: underline; }
+
 /* ─────────── Responsive ─────────── */
 @media (max-width: 768px) {
     .container { padding: 20px 16px 40px; }
