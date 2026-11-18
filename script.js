@@ -1753,6 +1753,51 @@ if (btnSaveKey) btnSaveKey.addEventListener('click', () => {
 
 refreshProviderUI();
 
+// ── Préchargement OCR en arrière-plan ──
+// Tesseract télécharge ses données de langue (~10 Mo) au 1er appel.
+// On le fait dès l'ouverture de la page, pendant que l'utilisateur choisit sa photo,
+// pour que la 1re analyse soit rapide.
+let ocrPreloaded = false;
+let ocrWorker = null;
+let ocrWorkerLangs = '';
+
+async function getOcrWorker(langs) {
+    if (ocrWorker && ocrWorkerLangs === langs) return ocrWorker;
+    if (ocrWorker && ocrWorker.terminate) { try { await ocrWorker.terminate(); } catch (e) {} }
+    if (!Tesseract || !Tesseract.createWorker) throw new Error('Tesseract indisponible');
+    ocrWorker = await Tesseract.createWorker(langs, 1, {
+        logger: m => {
+            if (typeof loadingText === 'undefined' || !loadingText) return;
+            if (m.status === 'recognizing text') loadingText.textContent = 'OCR en cours... ' + Math.round(m.progress * 100) + '%';
+            else if (m.status === 'loading language core') loadingText.textContent = 'Chargement de la langue OCR...';
+        }
+    });
+    ocrWorkerLangs = langs;
+    return ocrWorker;
+}
+
+async function preloadOcr() {
+    if (ocrPreloaded || typeof Tesseract === 'undefined' || !Tesseract.createWorker) return;
+    ocrPreloaded = true;
+    try {
+        const langs = (ocrLangSel && ocrLangSel.value) ? ocrLangSel.value : 'fra+eng';
+        await getOcrWorker(langs);   // worker conservé, prêt à l'emploi
+    } catch (e) {
+        ocrPreloaded = false;   // on réessaiera à la prochaine ouverture
+    }
+}
+function scheduleOcrPreload() {
+    if (typeof setTimeout === 'undefined') return;
+    const go = () => setTimeout(preloadOcr, 200);
+    try {
+        if (typeof window !== 'undefined' && window.requestIdleCallback) window.requestIdleCallback(go, { timeout: 3000 });
+        else setTimeout(go, 1200);
+    } catch (e) { setTimeout(go, 1200); }
+}
+scheduleOcrPreload();
+if (btnFile) btnFile.addEventListener('click', preloadOcr, { once: true });
+if (btnCamera) btnCamera.addEventListener('click', preloadOcr, { once: true });
+
 // ═══════════════════════════════════════════════════════
 // UTILITAIRES IMAGE / FLUX
 // ═══════════════════════════════════════════════════════
@@ -2940,15 +2985,21 @@ async function analyzeScreen() {
             const langData = ocrLangSel.value || 'fra+eng';
 
             showLoading('Lecture du texte (OCR)...');
-            const result = await Tesseract.recognize(ocrImage, langData, {
-                logger: m => {
-                    if (m.status === 'recognizing text') {
-                        loadingText.textContent = 'OCR en cours... ' + Math.round(m.progress * 100) + '%';
-                    } else if (m.status === 'loading language core') {
-                        loadingText.textContent = 'Chargement de la langue OCR...';
+            let result;
+            if (Tesseract && Tesseract.createWorker) {
+                const worker = await getOcrWorker(langData);
+                result = await worker.recognize(ocrImage);
+            } else {
+                result = await Tesseract.recognize(ocrImage, langData, {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            loadingText.textContent = 'OCR en cours... ' + Math.round(m.progress * 100) + '%';
+                        } else if (m.status === 'loading language core') {
+                            loadingText.textContent = 'Chargement de la langue OCR...';
+                        }
                     }
-                }
-            });
+                });
+            }
             text = (result.data.text || '').trim();
         } catch (err) {
             console.error('Erreur OCR:', err);
