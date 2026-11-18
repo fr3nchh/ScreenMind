@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScreenMind - Photo d'exercice → Réponses</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧠 ScreenMind</h1>
+            <p class="subtitle">Photo d'un exercice ou d'un contrôle → le site lit, détecte la langue et complète les réponses</p>
+            <div class="steps">
+                <span class="step is-active">1 · Photo</span>
+                <span class="step" id="step-2">2 · Langue &amp; matière</span>
+                <span class="step" id="step-3">3 · Réponses</span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- ══════════ COLONNE 1 : PRISE DE PHOTO ══════════ -->
+            <section class="capture-section">
+                <div id="preview-container">
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="canvas" style="display:none;"></canvas>
+                    <img id="preview" alt="Aperçu de la photo">
+                    <div id="placeholder">
+                        <span class="icon">📷</span>
+                        <p>Importe une image, prends une photo ou partage ton écran</p>
+                    </div>
+                    <div id="camera-actions" class="camera-actions">
+                        <button id="btn-shot" class="btn btn-success">📸 Valider la photo</button>
+                        <button id="btn-shot-cancel" class="btn btn-danger">✖ Annuler</button>
+                    </div>
+                </div>
+
+                <div class="buttons">
+                    <button id="btn-file" class="btn btn-primary">
+                        <span class="btn-icon">📁</span> Importer
+                    </button>
+                    <button id="btn-camera" class="btn btn-primary">
+                        <span class="btn-icon">📸</span> Caméra
+                    </button>
+                    <button id="btn-capture" class="btn btn-primary">
+                        <span class="btn-icon">🖥️</span> Écran
+                    </button>
+                    <button id="btn-analyze" class="btn btn-success" disabled>
+                        <span class="btn-icon">🔍</span> Analyser
+                    </button>
+                    <button id="btn-reset" class="btn btn-ghost" title="Réinitialiser">
+                        <span class="btn-icon">🔄</span>
+                    </button>
+                </div>
+                <input type="file" id="file-input" accept="image/*" hidden>
+
+                <div class="option-row">
+                    <label for="ocr-lang">Langue écrite sur la photo</label>
+                    <select id="ocr-lang">
+                        <option value="fra+eng" selected>Auto (français + anglais)</option>
+                        <option value="fra">Français</option>
+                        <option value="eng">Anglais</option>
+                        <option value="spa">Espagnol</option>
+                        <option value="deu">Allemand</option>
+                        <option value="ita">Italien</option>
+                        <option value="por">Portugais</option>
+                        <option value="ara">Arabe</option>
+                        <option value="chi_sim">Chinois</option>
+                    </select>
+                </div>
+
+                <div class="api-box">
+                    <details id="api-details">
+                        <summary>🔑 Clé Gemini <span class="api-hint">— pour les exercices trop complexes</span></summary>
+                        <p>Le site fait tout seul ce qu'il peut : lecture du texte, langue, matière, calculs et équations.
+                           Si l'énoncé est trop complexe pour lui, il envoie la photo à <strong>Gemini</strong> et te renvoie le corrigé complet.</p>
+                        <div class="api-line">
+                            <input type="password" id="api-key" placeholder="Colle ta clé API Gemini ici" autocomplete="off">
+                            <button id="btn-save-key" class="btn btn-small">Enregistrer</button>
+                        </div>
+                        <span id="key-status" class="key-status"></span>
+                        <a class="api-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">🔑 Obtenir une clé gratuite (Google AI Studio) →</a>
+                    </details>
+                </div>
+            </section>
+
+            <!-- ══════════ COLONNE 2 : RÉSULTATS ══════════ -->
+            <section class="results-section" id="results" style="display:none;">
+                <h2>Résultats</h2>
+
+                <div id="chips" class="chips"></div>
+
+                <div class="subject-card" id="subject-card">
+                    <div class="subject-icon" id="subject-icon">?</div>
+                    <div class="subject-info">
+                        <span class="subject-category" id="subject-category"></span>
+                        <h3 id="subject-name">En attente...</h3>
+                        <p id="subject-description"></p>
+                    </div>
+                </div>
+
+                <div class="confidence-bar">
+                    <label>Confiance de la détection</label>
+                    <div class="bar-track">
+                        <div class="bar-fill" id="confidence-fill"></div>
+                    </div>
+                    <span id="confidence-text">0%</span>
+                </div>
+
+                <div class="answers-block" id="answers-block">
+                    <h3>✅ Réponses trouvées par le site</h3>
+                    <div id="answers-list"></div>
+                    <p id="answers-hint" class="hint"></p>
+                </div>
+
+                <div class="gemini-block" id="gemini-block" style="display:none;">
+                    <h3>🤖 Corrigé complet</h3>
+                    <p id="gemini-status" class="hint"></p>
+                    <button id="btn-gemini" class="btn btn-primary">
+                        <span class="btn-icon">🤖</span> Demander le corrigé complet
+                    </button>
+                    <div id="gemini-answer" class="answer-box"></div>
+                </div>
+
+                <details class="ocr-details">
+                    <summary>📄 Texte lu sur la photo</summary>
+                    <pre id="detected-text"></pre>
+                </details>
+
+                <div id="top-matches" class="top-matches-section"></div>
+
+                <div id="web-results" class="web-results-section">
+                    <h3>🌐 Recherches dans la langue de l'image</h3>
+                    <div id="web-links"></div>
+                    <div id="wikipedia-result" class="wikipedia-box"></div>
+                </div>
+            </section>
+        </div>
+
+        <div class="loading-overlay" id="loading" style="display:none;">
+            <div class="spinner"></div>
+            <p id="loading-text">Analyse en cours...</p>
+        </div>
+
+        <footer>
+            <p>OCR local (Tesseract.js) • Résolution automatique • Gemini en secours si c'est trop complexe</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
