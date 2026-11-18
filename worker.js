@@ -28,22 +28,42 @@ export default {
         if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
         if (request.method !== 'POST') return new Response('ScreenMind proxy OK', { headers: cors });
 
-        let prompt, image, model, audio, mime;
+        // ── Cache serveur (Cloudflare KV, optionnel) ──
+        // (vérifié après parsing du body, voir ci-dessous)
+
+        let prompt, image, model, audio, mime, hash;
         try {
-            const body = await request.json();
-            prompt = body.prompt;
-            image = body.image;
-            model = body.model;
-            audio = body.audio;
-            mime = body.mime;
+            const b = await request.json();
+            prompt = b.prompt;
+            image = b.image;
+            model = b.model;
+            audio = b.audio;
+            mime = b.mime;
+            hash = b.hash;
         } catch (e) {
             return new Response(JSON.stringify({ error: 'JSON invalide' }), { status: 400, headers: cors });
+        }
+
+        // ── Cache serveur (Cloudflare KV, optionnel) ──
+        if (env.CACHE && hash && !audio) {
+            try {
+                const cached = await env.CACHE.get('ai:' + hash);
+                if (cached) {
+                    return new Response(JSON.stringify({ text: cached, cached: true }), { status: 200, headers: cors });
+                }
+            } catch (e) { /* ignore */ }
         }
 
         // ── Transcription audio (Groq Whisper) ──
         if (audio) {
             if (!env.GROQ_KEY) {
                 return new Response(JSON.stringify({ error: 'GROQ_KEY manquante sur le Worker (ajoute-la dans Variables and Secrets)' }), { status: 500, headers: cors });
+            }
+            if (env.CACHE && hash) {
+                try {
+                    const cached = await env.CACHE.get('audio:' + hash);
+                    if (cached) return new Response(JSON.stringify({ text: cached, cached: true }), { status: 200, headers: cors });
+                } catch (e) { /* ignore */ }
             }
             try {
                 const bin = atob(audio);
@@ -62,7 +82,11 @@ export default {
                     const msg = (data.error && (data.error.message || data.error)) || ('HTTP ' + r.status);
                     return new Response(JSON.stringify({ error: typeof msg === 'string' ? msg : JSON.stringify(msg) }), { status: r.status, headers: cors });
                 }
-                return new Response(JSON.stringify({ text: (data.text || '').trim() }), { status: 200, headers: cors });
+                const text = (data.text || '').trim();
+                if (env.CACHE && hash && text) {
+                    try { await env.CACHE.put('audio:' + hash, text, { expirationTtl: 60 * 60 * 24 * 30 }); } catch (e) { /* ignore */ }
+                }
+                return new Response(JSON.stringify({ text: text }), { status: 200, headers: cors });
             } catch (e) {
                 return new Response(JSON.stringify({ error: 'Transcription : ' + e }), { status: 500, headers: cors });
             }
@@ -120,7 +144,10 @@ export default {
             content = (content || '').trim();
 
             if (content) {
-                return new Response(JSON.stringify({ text: content, model: m }), { status: 200, headers: cors });
+                if (env.CACHE && hash) {
+                    try { await env.CACHE.put('ai:' + hash, content, { expirationTtl: 60 * 60 * 24 * 30 }); } catch (e) { /* ignore */ }
+                }
+                return new Response(JSON.stringify({ text: content, model: m, cached: false }), { status: 200, headers: cors });
             }
             lastError = 'Réponse vide du modèle ' + m;
         }

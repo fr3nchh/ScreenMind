@@ -1571,6 +1571,9 @@ let inputMode    = null;   // 'file' | 'camera' | 'screen'
 let imageDataUrl = null;   // base64 sans préfixe data:
 let extractedText = null;  // texte lu depuis un fichier non-image (PDF, txt, audio)
 let sourceType = 'image';  // 'image' | 'pdf' | 'text' | 'audio'
+let lastHash = null;       // hash de l'entrée courante (cache)
+let lastAiText = null;     // dernier corrigé IA généré
+let forceRefresh = false;  // forcer le recalcul (ignorer le cache)
 let imageMime    = 'image/png';
 let lastText     = '';
 let lastLang     = 'fr';
@@ -2567,6 +2570,7 @@ async function callProxy(prompt, img, model) {
     const body = { prompt: prompt };
     if (img) body.image = { mime: img.mime, b64: img.b64 };
     if (model) body.model = model;
+    if (lastHash) body.hash = lastHash;
     const res = await fetch(PROXY_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2632,6 +2636,12 @@ async function askAI() {
 
             geminiAnswer.innerHTML = mdToHtml(text);
             geminiStatus.textContent = 'Corrigé détaillé généré par ' + cfg.label + (model ? ' (' + model + ')' : '') + ' — dans la langue de ton image.';
+            lastAiText = text;
+            if (lastHash) {
+                const c = cacheGet(lastHash);
+                if (c) { c.aiText = text; cacheSet(lastHash, c); }
+                else cacheSet(lastHash, { text: lastText, aiText: text, ts: Date.now() });
+            }
             hideLoading();
             btnGemini.disabled = false;
             addCopyButton(text);
@@ -2725,6 +2735,92 @@ async function searchWeb(langCode, query, subjectName) {
 }
 
 // ═══════════════════════════════════════════════════════
+// CACHE : accélérer les exercices déjà vus
+// ═══════════════════════════════════════════════════════
+const CACHE_PREFIX = 'screenmind_cache_';
+const CACHE_TTL = 30 * 24 * 3600 * 1000; // 30 jours
+
+async function computeHash() {
+    const src = extractedText ? ('T:' + extractedText) : ('I:' + (imageDataUrl || ''));
+    try {
+        const buf = new TextEncoder().encode(src);
+        const digest = await crypto.subtle.digest('SHA-256', buf);
+        return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) {
+        // Fallback simple si crypto indisponible
+        let h = 0;
+        for (let i = 0; i < src.length; i++) h = (h * 31 + src.charCodeAt(i)) >>> 0;
+        return 'fb_' + h.toString(16);
+    }
+}
+
+function cacheGet(hash) {
+    if (!hash) return null;
+    try {
+        const raw = localStorage.getItem(CACHE_PREFIX + hash);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        if (!data || !data.ts || Date.now() - data.ts > CACHE_TTL) {
+            localStorage.removeItem(CACHE_PREFIX + hash);
+            return null;
+        }
+        return data;
+    } catch (e) { return null; }
+}
+
+function cacheSet(hash, data) {
+    if (!hash) return;
+    try {
+        localStorage.setItem(CACHE_PREFIX + hash, JSON.stringify(Object.assign({}, data || {}, { ts: Date.now() })));
+    } catch (e) { /* quota dépassé */ }
+}
+
+function addRecalcButton() {
+    const old = geminiBlock.querySelector('.recalc-btn');
+    if (old) old.remove();
+    const b = document.createElement('button');
+    b.className = 'btn btn-ghost recalc-btn';
+    b.textContent = 'Recalculer (ignorer le cache)';
+    b.style.marginTop = '10px';
+    b.addEventListener('click', () => { forceRefresh = true; analyzeScreen().catch(err => alert(err && err.message ? err.message : err)); });
+    geminiBlock.appendChild(b);
+}
+
+async function applyCached(c) {
+    showLoading('Résultat en cache…');
+    const text = c.text || '';
+    lastText = text;
+    const langCode = c.langCode || detectLanguage(text);
+    lastLang = langCode;
+    const detection = c.detection || { subject: 'inconnu', confidence: 0, matchedKeywords: [], topMatches: [] };
+    lastDetection = detection;
+    localAnswers = c.answers || [];
+    unsolvedCount = c.unsolved || 0;
+    needsHelp = (localAnswers.length === 0 || unsolvedCount > 0);
+    lastAiText = c.aiText || null;
+
+    displayResults(detection, langCode, text);
+    renderAnswers(localAnswers, unsolvedCount);
+    const dt = $('detected-text');
+    if (dt) dt.textContent = text ? (text.length > 2500 ? text.substring(0, 2500) + '…' : text) : 'Aucun texte lu.';
+
+    geminiBlock.style.display = 'block';
+    geminiAnswer.innerHTML = '';
+    geminiStatus.className = 'hint';
+    if (c.aiText) {
+        geminiAnswer.innerHTML = mdToHtml(c.aiText);
+        geminiStatus.textContent = 'Résultat en cache (instantané).';
+        addCopyButton(c.aiText);
+    } else if (needsHelp) {
+        geminiStatus.textContent = 'Résultat en cache. Tu peux demander un corrigé détaillé.';
+    } else {
+        geminiStatus.textContent = 'Le site a tout résolu lui-même (hors connexion).';
+    }
+    addRecalcButton();
+    hideLoading();
+}
+
+// ═══════════════════════════════════════════════════════
 // ANALYSE PRINCIPALE
 // ═══════════════════════════════════════════════════════
 async function analyzeScreen() {
@@ -2739,6 +2835,20 @@ async function analyzeScreen() {
 
     showLoading('Préparation...');
     try {
+        // ── Cache : exercice déjà vu ? ──
+        const hash = await computeHash().catch(() => null);
+        lastHash = hash;
+        if (hash && !forceRefresh) {
+            const cached = cacheGet(hash);
+            if (cached) {
+                forceRefresh = false;
+                await applyCached(cached);
+                return;
+            }
+        }
+        forceRefresh = false;
+
+        lastAiText = null;
         let text = '';
     let ocrOk = true;
 
@@ -2822,6 +2932,15 @@ async function analyzeScreen() {
     const firstQuestion = (text.split(/\n/).map(normalizeLine).find(l => l.length > 12 && /\?|calcule|resous|trouve|find|solve|determine/i.test(l))) || '';
     const query = firstQuestion ? firstQuestion.slice(0, 120) : (detection.matchedKeywords || []).slice(0, 4).join(' ') || 'exercice';
     searchWeb(langCode, query, allCategories[detection.subject] ? allCategories[detection.subject].name : query);
+
+    cacheSet(lastHash, {
+        text: text,
+        langCode: langCode,
+        detection: detection,
+        answers: localAnswers,
+        unsolved: unsolvedCount,
+        aiText: lastAiText
+    });
 
     hideLoading();
     } catch (err) {
