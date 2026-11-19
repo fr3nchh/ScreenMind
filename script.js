@@ -1601,9 +1601,9 @@ const PROVIDERS = {
         kind: 'proxy',
         keyUrl: '',
         keyHint: 'Aucune clé à créer : la clé est stockée de façon cachée sur un serveur sécurisé, elle n\'est jamais visible dans le site.',
-        models: [],
-        fallback: 'Le serveur choisit automatiquement le meilleur modèle gratuit.',
-        defaultModel: ''
+        models: ['inclusionai/ling-3.2-flash:free', 'nvidia/nemotron-3.5-super-vl:free'],
+        fallback: 'Le serveur choisit automatiquement le modèle gratuit le plus rapide.',
+        defaultModel: 'inclusionai/ling-3.2-flash:free'
     },
     gemini: {
         label: 'Google Gemini',
@@ -2647,7 +2647,7 @@ async function callProxy(prompt, img, model) {
     const body = { prompt: prompt };
     if (img) body.image = { mime: img.mime, b64: img.b64 };
     if (model) body.model = model;
-    if (lastHash) body.hash = lastHash + '-v2';
+    if (lastHash) body.hash = lastHash + '-v3';
     const res = await fetch(PROXY_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2888,7 +2888,7 @@ async function searchWeb(langCode, query, subjectName) {
 // ═══════════════════════════════════════════════════════
 // CACHE : accélérer les exercices déjà vus
 // ═══════════════════════════════════════════════════════
-const CACHE_PREFIX = 'screenmind_cache_v2_';
+const CACHE_PREFIX = 'screenmind_cache_v3_';
 const CACHE_TTL = 30 * 24 * 3600 * 1000; // 30 jours
 
 async function hashString(src) {
