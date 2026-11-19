@@ -2687,7 +2687,7 @@ async function askAI() {
     try {
         geminiAnswer.innerHTML = '';
         geminiStatus.className = 'hint';
-        geminiStatus.textContent = "Photo envoyée à " + cfg.label + "… (10 à 30 secondes)";
+        geminiStatus.textContent = "Envoi de la photo… (quelques secondes)";
         showLoading(cfg.label + ' lit la photo et prépare le corrigé...');
 
     const prompt =
@@ -2715,7 +2715,7 @@ async function askAI() {
                     : await callOpenAICompatible(cfg, key, prompt, img, model);
 
             geminiAnswer.innerHTML = mdToHtml(text);
-            geminiStatus.textContent = 'Corrigé détaillé généré par ' + cfg.label + (model ? ' (' + model + ')' : '') + ' — dans la langue de ton image.';
+            geminiStatus.textContent = 'Corrigé prêt — dans la langue de ton image.';
             lastAiText = text;
             if (lastHash) {
                 const c = cacheGet(lastHash);
