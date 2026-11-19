@@ -2503,10 +2503,19 @@ function renderAnswers(list, unsolved) {
 function mdToHtml(md) {
     const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const math = s => s
+        .replace(/\\text\{([^{}]*)\}/g, '$1')
+        .replace(/\\mathrm\{([^{}]*)\}/g, '$1')
+        .replace(/\\sqrt\{([^{}]*)\}/g, '√$1')
+        .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '$1/$2')
+        .replace(/\\left|\\right/g, '')
         .replace(/\\times/g, '×').replace(/\\div/g, '÷').replace(/\\cdot/g, '·')
         .replace(/\\le/g, '≤').replace(/\\ge/g, '≥').replace(/\\ne/g, '≠')
-        .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '$1/$2')
-        .replace(/\$/g, '');
+        .replace(/\\pi/g, 'π').replace(/\\infty/g, '∞')
+        .replace(/\\%|\\#|\\_|\\\$/g, m => m.charAt(1))
+        .replace(/\\,|\\;|\\!|\\:/g, ' ')
+        .replace(/\^\{2\}/g, '²').replace(/\^\{3\}/g, '³')
+        .replace(/\$+/g, '')
+        .replace(/\\([A-Za-z])/g, '$1');
     const inline = s => math(esc(s))
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -2638,7 +2647,7 @@ async function callProxy(prompt, img, model) {
     const body = { prompt: prompt };
     if (img) body.image = { mime: img.mime, b64: img.b64 };
     if (model) body.model = model;
-    if (lastHash) body.hash = lastHash;
+    if (lastHash) body.hash = lastHash + '-v2';
     const res = await fetch(PROXY_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2682,14 +2691,17 @@ async function askAI() {
         showLoading(cfg.label + ' lit la photo et prépare le corrigé...');
 
     const prompt =
-        "Tu es un professeur patient et rigoureux.\n" +
-        "Le texte ci-dessous (ou la photo ci-jointe) est un énoncé d'exercice, de devoir, de contrôle ou un document quelconque.\n" +
-        (extractedText ? ("Texte du document :\n---\n" + extractedText.slice(0, 12000) + "\n---\n") : "") +
-        "1. Détermine la langue du texte.\n" +
-        "2. Donne LA RÉPONSE COMPLÈTE de chaque question/exercice, étape par étape, en justifiant brièvement.\n" +
-        "3. Réponds TOUJOURS dans la langue du texte (langue estimée : " + L.name + ").\n" +
-        "4. Si ce n'est pas un exercice, résume le document en 5 points maximum.\n" +
-        "Format Markdown : un titre court par question, des listes à puces pour les étapes, et la réponse finale en gras.";
+        "Tu es un professeur. Réponds de façon TRÈS COURTE et claire.\n" +
+        "Document (photo ou texte) : un exercice scolaire.\n" +
+        "Règles OBLIGATOIRES :\n" +
+        "- Une seule ligne par question : « Question n) = réponse ».\n" +
+        "- Pas d'étapes, pas d'explications, pas d'introduction, pas de conclusion.\n" +
+        "- Pour un calcul simple, donne juste le résultat. Pour une équation, donne juste la solution.\n" +
+        "- N'utilise JAMAIS de LaTeX, ni $, ni \\, ni \\times, ni \\frac, ni \\%. Utilise uniquement ces caractères : × ÷ = + - ( ) √ π ² ³ % , .\n" +
+        "- Réponds dans la langue du document (langue estimée : " + L.name + ").\n" +
+        "Maximum 8 lignes au total.";
+
+    if (extractedText) prompt = prompt + "\n\nTexte du document :\n" + extractedText.slice(0, 6000);
 
     const img = imageDataUrl ? await compressForApi(imageDataUrl, imageMime) : null;
 
@@ -2876,7 +2888,7 @@ async function searchWeb(langCode, query, subjectName) {
 // ═══════════════════════════════════════════════════════
 // CACHE : accélérer les exercices déjà vus
 // ═══════════════════════════════════════════════════════
-const CACHE_PREFIX = 'screenmind_cache_';
+const CACHE_PREFIX = 'screenmind_cache_v2_';
 const CACHE_TTL = 30 * 24 * 3600 * 1000; // 30 jours
 
 async function hashString(src) {
